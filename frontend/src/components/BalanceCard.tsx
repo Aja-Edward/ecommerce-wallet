@@ -6,6 +6,7 @@ interface BalanceCardProps {
   title: string;
 }
 
+
 const BalanceCard: React.FC<BalanceCardProps> = ({ balance, title }) => {
   return (
     <div className='border border-gray-300 p-2 m-2 rounded-lg shadow-md'>
