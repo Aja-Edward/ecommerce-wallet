@@ -10,43 +10,85 @@ import {
   Play,
   Star,
   Users,
-  DollarSign
-} from 'lucide-react';
+  DollarSign,
 
-const WalletHero = () => {
-  const [currentFeature, setCurrentFeature] = useState(0);
-  const [animatedNumbers, setAnimatedNumbers] = useState({
+} from 'lucide-react';
+import type { LucideIcon } from "lucide-react";
+
+// Types for the component
+interface Feature {
+  icon: LucideIcon;
+  text: string;
+}
+
+interface AnimatedNumbers {
+  users: number;
+  transactions: number;
+  saved: number;
+}
+
+interface Transaction {
+  name: string;
+  amount: string;
+  color: 'red' | 'green';
+}
+
+interface StatItem {
+  value: string;
+  label: string;
+}
+
+// Props interface (currently no props, but good practice to define)
+interface WalletHeroProps {
+  // Add props here if needed in the future
+}
+
+const WalletHero: React.FC<WalletHeroProps> = () => {
+  const [currentFeature, setCurrentFeature] = useState<number>(0);
+  const [animatedNumbers, setAnimatedNumbers] = useState<AnimatedNumbers>({
     users: 0,
     transactions: 0,
     saved: 0
   });
 
-  const features = [
+  const features: Feature[] = [
     { icon: Shield, text: "Bank-level Security" },
     { icon: Zap, text: "Instant Transactions" },
     { icon: Globe, text: "Global Payments" },
-    { icon: TrendingUp, text: "Smart Analytics" }
+    { icon: TrendingUp, text: "Smart Analytics" },
+    {icon: CreditCard, text: "Credit Balance"}
   ];
+
+  const transactions: Transaction[] = [
+    { name: "Amazon", amount: "-$89.99", color: "red" },
+    { name: "Salary", amount: "+$3,200", color: "green" },
+    { name: "Netflix", amount: "-$15.99", color: "red" }
+  ];
+
+  // Type for the animate number function
+  const animateNumber = (
+    target: number, 
+    key: keyof AnimatedNumbers, 
+    duration: number = 2000
+  ): void => {
+    let start = 0;
+    const increment = target / (duration / 16);
+    
+    const timer = setInterval(() => {
+      start += increment;
+      if (start >= target) {
+        start = target;
+        clearInterval(timer);
+      }
+      setAnimatedNumbers(prev => ({
+        ...prev,
+        [key]: Math.floor(start)
+      }));
+    }, 16);
+  };
 
   // Animate numbers on mount
   useEffect(() => {
-    const animateNumber = (target, key, duration = 2000) => {
-      let start = 0;
-      const increment = target / (duration / 16);
-      
-      const timer = setInterval(() => {
-        start += increment;
-        if (start >= target) {
-          start = target;
-          clearInterval(timer);
-        }
-        setAnimatedNumbers(prev => ({
-          ...prev,
-          [key]: Math.floor(start)
-        }));
-      }, 16);
-    };
-
     animateNumber(2500000, 'users');
     animateNumber(15000000, 'transactions');
     animateNumber(500000, 'saved');
@@ -58,7 +100,28 @@ const WalletHero = () => {
       setCurrentFeature((prev) => (prev + 1) % features.length);
     }, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [features.length]);
+
+  // Helper function to get transaction color classes
+  const getTransactionColorClass = (color: Transaction['color']): string => {
+    return color === 'green' ? 'text-green-400' : 'text-red-400';
+  };
+
+  // Stats data for rendering
+  const stats: StatItem[] = [
+    {
+      value: `${animatedNumbers.users.toLocaleString()}+`,
+      label: "Active Users"
+    },
+    {
+      value: `$${animatedNumbers.transactions.toLocaleString()}M`,
+      label: "Processed"
+    },
+    {
+      value: `$${animatedNumbers.saved.toLocaleString()}K`,
+      label: "Avg. Saved"
+    }
+  ];
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
@@ -104,6 +167,7 @@ const WalletHero = () => {
               <p className="text-base sm:text-lg lg:text-xl text-gray-300 max-w-lg mx-auto lg:mx-0 leading-relaxed px-4 lg:px-0">
                 Experience the future of digital payments. Send, receive, and manage your money with unparalleled security and lightning-fast speed.
               </p>
+           
             </div>
 
             {/* Rotating Features */}
@@ -136,24 +200,14 @@ const WalletHero = () => {
 
             {/* Stats */}
             <div className="grid grid-cols-3 gap-4 md:gap-6 pt-6 md:pt-8 px-4 lg:px-0">
-              <div className="text-center">
-                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">
-                  {animatedNumbers.users.toLocaleString()}+
+              {stats.map((stat, index) => (
+                <div key={index} className="text-center">
+                  <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">
+                    {stat.value}
+                  </div>
+                  <div className="text-gray-400 text-xs sm:text-sm">{stat.label}</div>
                 </div>
-                <div className="text-gray-400 text-xs sm:text-sm">Active Users</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">
-                  ${animatedNumbers.transactions.toLocaleString()}M
-                </div>
-                <div className="text-gray-400 text-xs sm:text-sm">Processed</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">
-                  ${animatedNumbers.saved.toLocaleString()}K
-                </div>
-                <div className="text-gray-400 text-xs sm:text-sm">Avg. Saved</div>
-              </div>
+              ))}
             </div>
           </div>
 
@@ -207,16 +261,10 @@ const WalletHero = () => {
                 <div className="p-4 sm:p-6 pt-0">
                   <div className="text-gray-400 text-xs sm:text-sm mb-2 sm:mb-3">Recent Activity</div>
                   <div className="space-y-1.5 sm:space-y-2">
-                    {[
-                      { name: "Amazon", amount: "-$89.99", color: "red" },
-                      { name: "Salary", amount: "+$3,200", color: "green" },
-                      { name: "Netflix", amount: "-$15.99", color: "red" }
-                    ].map((transaction, index) => (
+                    {transactions.map((transaction, index) => (
                       <div key={index} className="flex items-center justify-between py-0.5 sm:py-1">
                         <span className="text-white text-xs sm:text-sm">{transaction.name}</span>
-                        <span className={`text-xs sm:text-sm font-medium ${
-                          transaction.color === 'green' ? 'text-green-400' : 'text-red-400'
-                        }`}>
+                        <span className={`text-xs sm:text-sm font-medium ${getTransactionColorClass(transaction.color)}`}>
                           {transaction.amount}
                         </span>
                       </div>
@@ -227,7 +275,7 @@ const WalletHero = () => {
             </div>
 
             {/* Floating Elements - Hidden on mobile for cleaner look */}
-            <div className="hidden sm:block absolute -top-2 sm:-top-4 -right-2 sm:-right-4 w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl sm:rounded-2xl flex items-center justify-center animate-bounce-slow shadow-lg">
+            <div className="hidden sm:block absolute -top-2 sm:-top-4 -right-2 sm:-right-4 w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl sm:rounded-2xl flex justify-center items-center animate-bounce-slow shadow-lg">
               <Shield className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
             </div>
             
@@ -258,6 +306,8 @@ const WalletHero = () => {
               </div>
             </div>
           </div>
+        </div>
+        <div>
         </div>
       </div>
 
@@ -323,4 +373,5 @@ const WalletHero = () => {
     </div>
   );
 };
+
 export default WalletHero;
