@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { ChevronDown, User, Wallet, LogOut, Menu, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export const Navbar = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const navigate = useNavigate()
 
   const handleLogin = () => {
     setIsLoggedIn(true);
@@ -19,7 +22,9 @@ export const Navbar = () => {
     { name: 'About', href: '#about' },
     { name: 'Contact', href: '#contact' },
     { name: 'Career', href: '#career' },
-    { name: 'Wallet', href: '#wallet' }
+    { name: 'Wallet', href: '#wallet' },
+     { name: 'Privacy', href: 'privacy' }
+
   ];
 
   return (
@@ -27,7 +32,7 @@ export const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <div className="flex-shrink-0">
+          <div onClick={ () => navigate("/") } className="flex-shrink-0 cursor-pointer">
             <div className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
               LOGO
             </div>
