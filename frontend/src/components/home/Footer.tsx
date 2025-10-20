@@ -1,11 +1,12 @@
 import React from 'react';
 import { Mail, Phone, MapPin, ArrowRight, Facebook, Instagram, Linkedin, Twitter } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function ModernFooter() {
   return (
     <footer className="bg-gradient-to-br from-slate-50 to-blue-50 py-16 px-6">
       <div className="max-w-7xl mx-auto">
-        {/* CTA Section */}
+        {/* CTA Section
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-3xl p-12 mb-16 text-center shadow-xl">
           <div className="flex justify-center mb-6">
             <div className="bg-white/20 backdrop-blur-sm p-4 rounded-2xl">
@@ -24,7 +25,7 @@ export default function ModernFooter() {
             Create Wallet Now
             <ArrowRight className="w-5 h-5" />
           </button>
-        </div>
+        </div> */}
 
         {/* Footer Links */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
@@ -124,12 +125,12 @@ export default function ModernFooter() {
         <div className="pt-8 border-t border-slate-200">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-slate-600 text-sm">
-              © Copyright <a href="#" className="text-indigo-600 hover:underline">WalletPay</a> All rights reserved. 2024
+              © Copyright <a href="#" className="text-indigo-600 hover:underline">TonyWallet</a> All rights reserved. 2025
             </p>
             <div className="flex gap-6">
-              <a href="#" className="text-slate-600 hover:text-indigo-600 text-sm transition-colors">
+              <Link to="privacy" className="text-slate-600 hover:text-indigo-600 text-sm transition-colors">
                 Privacy Policy
-              </a>
+              </Link>
               <a href="#" className="text-slate-600 hover:text-indigo-600 text-sm transition-colors">
                 Terms of Service
               </a>
@@ -140,6 +141,7 @@ export default function ModernFooter() {
           </div>
         </div>
       </div>
+       
     </footer>
   );
 }

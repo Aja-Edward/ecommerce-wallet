@@ -19,11 +19,11 @@ export const Navbar = () => {
   };
 
   const navItems = [
-    { name: 'About', href: '#about' },
+    { name: 'About us', href: 'about' },
     { name: 'Contact', href: '#contact' },
     { name: 'Career', href: '#career' },
     { name: 'Wallet', href: '#wallet' },
-     { name: 'Privacy', href: 'privacy' }
+    
 
   ];
 

@@ -9,27 +9,10 @@ import Footer from '../components/home/Footer';
 
 const Home = lazy(() => import('../pages/Landing/Home'));
 const Privacy = lazy(()=> import('../pages/Privacy/FirstPrivacypage'))
+const AboutPage = lazy(() => import('../pages/aboutus/AboutUS'))
+const WalletPage = lazy(() => import('../pages/wallet/WalletPage'));
 
-// const LoadingSpinner = () => (
-//   <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-//     <div className="flex flex-col items-center space-y-4">
-//       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-//       <p className="text-white/70 text-sm">Loading...</p>
-//     </div>
-//   </div>
-// );
 
-// const RootLayout = () =>{
-//     return (
-//     <div className={"min-h-screen transition-colors duration-300"}>
-//       <div className="pt-0" id="main-content"> {/* Let individual components handle their own padding */}
-//         <Suspense fallback={<LoadingSpinner />}>
-//           <Outlet />
-//         </Suspense>
-//       </div>
-//     </div>
-//   );
-// }
 
 const MainLayout = () => (
   <>
@@ -62,6 +45,16 @@ export const router = createBrowserRouter([
         element: <Privacy/>,
         errorElement: <RouteErrorElement />
       },
+      {
+        path: 'about',
+        element: <AboutPage/>,
+        errorElement: <RouteErrorElement />
+      },
+      {
+         path: 'wallet',            
+        element: <WalletPage />,
+        errorElement: <RouteErrorElement />
+      }
 ]
     },
 ]);
