@@ -9,10 +9,7 @@ import Footer from '../components/home/Footer';
 
 const Home = lazy(() => import('../pages/Landing/Home'));
 const Privacy = lazy(()=> import('../pages/Privacy/FirstPrivacypage'))
-const AboutPage = lazy(() => import('../pages/aboutus/AboutUS'))
-const WalletPage = lazy(() => import('../pages/wallet/WalletPage'));
-
-
+const RegisterForm = lazy(() => import('../pages/Landing/Register'));
 
 const MainLayout = () => (
   <>
@@ -45,16 +42,11 @@ export const router = createBrowserRouter([
         element: <Privacy/>,
         errorElement: <RouteErrorElement />
       },
-      {
-        path: 'about',
-        element: <AboutPage/>,
+       {
+        path: 'signup',
+        element: <RegisterForm/>,
         errorElement: <RouteErrorElement />
       },
-      {
-         path: 'wallet',            
-        element: <WalletPage />,
-        errorElement: <RouteErrorElement />
-      }
 ]
     },
 ]);

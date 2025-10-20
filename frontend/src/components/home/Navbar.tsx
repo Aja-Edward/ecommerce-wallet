@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown, User, Wallet, LogOut, Menu, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 export const Navbar = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -63,9 +63,9 @@ export const Navbar = () => {
                 >
                   Login
                 </button>
-                <button className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 text-sm font-medium rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 transform hover:scale-105">
+                <Link to={'/signup'}  className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 text-sm font-medium rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 transform hover:scale-105">
                   Join
-                </button>
+                </Link>
               </>
             ) : (
               <div className="relative">
