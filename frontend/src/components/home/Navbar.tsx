@@ -57,12 +57,12 @@ export const Navbar = () => {
           <div className="hidden md:flex items-center space-x-4">
             {!isLoggedIn ? (
               <>
-                <button
+                <Link to ={'/signin'}
                   onClick={handleLogin}
                   className="text-gray-300 hover:text-white px-4 py-2 text-sm font-medium transition-colors duration-200 hover:bg-gray-800/50 rounded-lg"
                 >
                   Login
-                </button>
+                </Link>
                 <Link to={'/signup'}  className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 text-sm font-medium rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 transform hover:scale-105">
                   Join
                 </Link>
