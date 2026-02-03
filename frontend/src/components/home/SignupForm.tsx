@@ -1,6 +1,7 @@
 // SignUpForm.tsx
 import React, { useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
+import { register, login } from '../../services/api';
 
 interface SignUpFormState {
   name: string;
@@ -14,19 +15,46 @@ export const SignUpForm: React.FC = () => {
   });
 
   const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+
     if (!form.name || !form.email || !form.password) {
       setError('Please fill out all fields');
       return;
     }
+
     setError('');
-    alert('Sign Up Successful!');
+    setLoading(true);
+
+    try {
+      // 1. Register the user (backend expects: email, password, username)
+      await register({
+        email: form.email,
+        password: form.password,
+        username: form.name,
+      });
+
+      // 2. Auto-login immediately after successful registration
+      //    This stores the tokens in sessionStorage via setTokens()
+      await login({
+        email: form.email,
+        password: form.password,
+      });
+
+      window.location.href = '/dashboard';
+
+    } catch (err) {
+      // err.message is pulled from the backend's error response by request()
+      setError(err instanceof Error ? err.message : 'Sign up failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -40,7 +68,8 @@ export const SignUpForm: React.FC = () => {
           placeholder="Full Name"
           value={form.name}
           onChange={handleChange}
-          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+          disabled={loading}
+          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
         />
         <input
           type="email"
@@ -48,7 +77,8 @@ export const SignUpForm: React.FC = () => {
           placeholder="Email"
           value={form.email}
           onChange={handleChange}
-          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+          disabled={loading}
+          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
         />
         <input
           type="password"
@@ -56,13 +86,15 @@ export const SignUpForm: React.FC = () => {
           placeholder="Password"
           value={form.password}
           onChange={handleChange}
-          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+          disabled={loading}
+          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
         />
         <button
           type="submit"
-          className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-2 rounded-lg hover:from-blue-600 hover:to-purple-700 transition duration-200 text-lg"
+          disabled={loading}
+          className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-2 rounded-lg hover:from-blue-600 hover:to-purple-700 transition duration-200 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Create Account
+          {loading ? 'Creating account...' : 'Create Account'}
         </button>
         <div className="text-sm text-center mt-2">
           Already have an account? <a href="/signin" className="text-blue-500 underline">Sign In</a>

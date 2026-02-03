@@ -11,9 +11,21 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+from decouple import config
+import os
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load .env file
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+
+# Supabase configuration
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")  # only if needed
 
 
 # Quick-start development settings - unsuitable for production
@@ -30,6 +42,8 @@ ALLOWED_HOSTS = []
 
 # Application definition
 
+# settings.py
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -37,17 +51,57 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "corsheaders",  # ← Add this
     "api",
+    "authentication",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",  # ← Add this (must be before CommonMiddleware)
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+
+# If you want to allow all origins during development (NOT recommended for production)
+# CORS_ALLOW_ALL_ORIGINS = True
+
+# Allow credentials (cookies, authorization headers, etc.)
+CORS_ALLOW_CREDENTIALS = True
+
+# Allow specific headers
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",  # ← Add this (must be before CommonMiddleware)
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+# CORS settings - Add these at the end of your settings.py
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",  # Your Vite frontend
+    "http://127.0.0.1:5173",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -76,11 +130,11 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "mydb",
-        "USER": "myuser",
-        "PASSWORD": "mypassword",
+        "NAME": "edward_and_tonny_ecommerce",
+        "USER": "edwardtonny",
+        "PASSWORD": "edward_tonny_data",
         "HOST": "localhost",
-        "PORT": "5432",
+        "PORT": "5433",
     }
 }
 
@@ -102,7 +156,7 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
-
+AUTH_USER_MODEL = "authentication.User"
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
