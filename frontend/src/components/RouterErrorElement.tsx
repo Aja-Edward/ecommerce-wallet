@@ -1,35 +1,38 @@
 const RouteErrorElement = () => {
-  const error = (window as any).__routerError || 'Unknown error';
-  
+  const error = (window as any).__routerError || "Unknown error";
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 px-4">
-      <div className="max-w-md w-full bg-white/10 backdrop-blur-2xl rounded-3xl p-8 border border-white/20 shadow-2xl text-center">
-        <h1 className="text-2xl font-bold text-white mb-4">Oops! Something went wrong</h1>
-        <p className="text-white/70 mb-4">
-          We encountered an error while loading this page.
+    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
+      <div className="max-w-md w-full bg-white rounded-xl p-8 shadow-lg border border-slate-200 text-center">
+        <h1 className="text-2xl font-semibold text-slate-800 mb-3">
+          Something went wrong
+        </h1>
+
+        <p className="text-slate-600 mb-6">
+          We couldn’t load this page. Please try again or return to the homepage.
         </p>
-        
-        {/* Debug information - remove in production */}
-        <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-3 mb-6 text-left">
-          <p className="text-red-200 text-xs font-mono">
-            Debug Info: {JSON.stringify(error, null, 2)}
+
+        {/* Debug info – remove in production */}
+        <div className="bg-slate-50 border border-slate-200 rounded-md p-3 mb-6 text-left">
+          <p className="text-slate-500 text-xs font-mono whitespace-pre-wrap">
+            {JSON.stringify(error, null, 2)}
           </p>
-          <p className="text-red-200 text-xs mt-2">
-            Current URL: {window.location.href}
+          <p className="text-slate-400 text-xs mt-2">
+            URL: {window.location.href}
           </p>
         </div>
-        
+
         <div className="space-y-3">
           <button
-            onClick={() => window.location.href = '/'}
-            className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all duration-300"
+            onClick={() => (window.location.href = "/")}
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition"
           >
-            Go Home
+            Go to Home
           </button>
-          
+
           <button
             onClick={() => window.location.reload()}
-            className="w-full bg-gray-600 text-white py-2 rounded-xl font-semibold hover:bg-gray-700 transition-colors"
+            className="w-full bg-slate-200 text-slate-700 py-2.5 rounded-lg font-medium hover:bg-slate-300 transition"
           >
             Retry
           </button>
@@ -38,4 +41,5 @@ const RouteErrorElement = () => {
     </div>
   );
 };
+
 export default RouteErrorElement;
