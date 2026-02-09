@@ -128,13 +128,13 @@ WSGI_APPLICATION = "config.wsgi.application"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "edward_and_tonny_ecommerce",
-        "USER": "edwardtonny",
-        "PASSWORD": "edward_tonny_data",
-        "HOST": "localhost",
-        "PORT": "5433",
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'tennidatech_db',
+        'USER': 'postgres',
+        'PASSWORD': '200577',  # the password he set
+        'HOST': 'localhost',
+        'PORT': '5433',  # IMPORTANT
     }
 }
 

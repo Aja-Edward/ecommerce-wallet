@@ -1,13 +1,12 @@
 // SignUpForm.tsx
 import React, { useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
+import type {SignUpFormState} from '../../types/types';
+
 import { register, login } from '../../services/api';
 
-interface SignUpFormState {
-  name: string;
-  email: string;
-  password: string;
-}
+
+
 
 export const SignUpForm: React.FC = () => {
   const [form, setForm] = useState<SignUpFormState>({

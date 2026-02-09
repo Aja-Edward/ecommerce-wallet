@@ -27,3 +27,17 @@ export interface UserProfile {
   email: string;
   username: string;
 }
+
+export interface SignUpFormState {
+  name: string;
+  email: string;
+  password: string;
+}
+
+
+
+
+
+
+
+

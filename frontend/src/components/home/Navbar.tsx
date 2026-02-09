@@ -19,7 +19,7 @@ export const Navbar = () => {
   };
 
   const navItems = [
-    { name: 'About us', href: 'about' },
+    { name: 'About us', href: 'aboutus' },
     { name: 'Contact', href: '#contact' },
     { name: 'Career', href: '#career' },
     { name: 'Wallet', href: '#wallet' },
