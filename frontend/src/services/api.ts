@@ -1,4 +1,3 @@
-
 // services/api.ts
 import type {RegisterPayload, LoginPayload, AuthTokens, UserProfile} from '../types/types';
 
