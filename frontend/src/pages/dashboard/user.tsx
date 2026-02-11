@@ -1,9 +1,9 @@
-import React from 'react'
-import { Dashboard } from '../../components/userdashboard/UserDashboard'
+
+import  Tenniola  from '../../components/userdashboard/UserDashboard'
 
 const user = () => {
   return (
-    <div><Dashboard /></div>
+    <div><Tenniola /></div>
   )
 }
 
