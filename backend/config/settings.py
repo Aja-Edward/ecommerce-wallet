@@ -54,6 +54,9 @@ INSTALLED_APPS = [
     "corsheaders",  # ← Add this
     "api",
     "authentication",
+    "wallet",
+    "orders",
+    "payments",
 ]
 
 MIDDLEWARE = [
