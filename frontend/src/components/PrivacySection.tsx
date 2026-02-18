@@ -1,7 +1,7 @@
 import React from "react";
 import BalanceCard from "./BalanceCard";
 import Button from "./Button";
-import type { PrivacyPolicySection } from "../types/types";
+import type { PrivacyPolicySection } from "../types/auth.types";
 import { privacyData } from "../assets/data/privacyData";
 
 const Privacy: React.FC<PrivacyPolicySection> = () => {

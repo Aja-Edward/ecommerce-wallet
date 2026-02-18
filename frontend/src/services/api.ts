@@ -1,5 +1,5 @@
 // services/api.ts
-import type {RegisterPayload, LoginPayload, AuthTokens, UserProfile} from '../types/types';
+import type {RegisterPayload, LoginPayload, AuthTokens, UserProfile} from '../types/auth.types';
 
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
