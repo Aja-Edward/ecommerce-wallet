@@ -1,6 +1,3 @@
-"""
-Wallet URL Configuration
-"""
 from django.urls import path
 from .views import (
     WalletDetailView,
@@ -8,23 +5,26 @@ from .views import (
     WalletTransactionListView,
     WalletTransactionDetailView,
     InitiateFundingView,
-    DebitWalletView
+    DebitWalletView,
+    VerifyWalletFundingView,
 )
 
-app_name = 'wallet'
-
 urlpatterns = [
-    # Wallet endpoints
-    path('', WalletDetailView.as_view(), name='wallet-detail'),
-    path('balance/', WalletBalanceView.as_view(), name='wallet-balance'),
-    
-    # Transaction endpoints
-    path('transactions/', WalletTransactionListView.as_view(), name='transaction-list'),
-    path('transactions/<str:reference>/', WalletTransactionDetailView.as_view(), name='transaction-detail'),
-    
-    # Funding endpoints
-    path('fund/', InitiateFundingView.as_view(), name='initiate-funding'),
-    
-    # Debit endpoint (internal use)
-    path('debit/', DebitWalletView.as_view(), name='debit-wallet'),
+    path("", WalletDetailView.as_view(), name="wallet-detail"),
+    path("balance/", WalletBalanceView.as_view(), name="wallet-balance"),
+    path(
+        "transactions/", WalletTransactionListView.as_view(), name="wallet-transactions"
+    ),
+    path(
+        "transactions/<str:reference>/",
+        WalletTransactionDetailView.as_view(),
+        name="wallet-transaction-detail",
+    ),
+    path("fund/", InitiateFundingView.as_view(), name="wallet-fund"),
+    path("debit/", DebitWalletView.as_view(), name="wallet-debit"),
+    path(
+        "verify/<str:reference>/",
+        VerifyWalletFundingView.as_view(),
+        name="verify-funding",
+    ),  # Add this
 ]

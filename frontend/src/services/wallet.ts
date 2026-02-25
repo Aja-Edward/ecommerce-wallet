@@ -29,7 +29,7 @@ const WALLET_BASE = `${API_BASE_URL}/wallet`;
  */
 const getAccessToken = (): string | null => {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('access_token');
+ return sessionStorage.getItem('access_token');
 };
 
 // ─── Fetch Wrapper ─────────────────────────────────────────────────────────────
@@ -80,7 +80,6 @@ async function walletFetch<T>(
     };
     throw apiError;
   }
-
   return json as T;
 }
 

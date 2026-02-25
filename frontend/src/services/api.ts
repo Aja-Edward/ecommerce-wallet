@@ -3,7 +3,7 @@ import type {RegisterPayload, LoginPayload, AuthTokens, UserProfile} from '../ty
 
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  'http://localhost:8000';
+  'http://localhost:8000/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,7 +71,7 @@ async function request<T>(
 export async function register(
   payload: RegisterPayload
 ): Promise<{ message: string }> {
-  return request<{ message: string }>("/api/auth/register/", {  // ← FIXED: Added leading slash
+  return request<{ message: string }>("/auth/register/", {  // ← FIXED: Added leading slash
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -81,7 +81,7 @@ export async function register(
  * Log in and persist the returned tokens to sessionStorage.
  */
 export async function login(payload: LoginPayload): Promise<AuthTokens> {
-  const tokens = await request<AuthTokens>("/api/auth/login/", {  // ← FIXED: Added leading slash
+  const tokens = await request<AuthTokens>("/auth/login/", {  // ← FIXED: Added leading slash
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -94,7 +94,7 @@ export async function login(payload: LoginPayload): Promise<AuthTokens> {
  * Requires a valid access_token already stored (i.e. login was called first).
  */
 export async function getProfile(): Promise<UserProfile> {
-  return request<UserProfile>("/api/auth/profile/");  // ← FIXED: Added leading slash
+  return request<UserProfile>("/auth/profile/");  // ← FIXED: Added leading slash
 }
 
 /**
