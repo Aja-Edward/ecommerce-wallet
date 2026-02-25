@@ -1,13 +1,22 @@
 """
-Payments URL Configuration
+Payment URLs
 """
-from django.urls import path
 
-app_name = 'payments'
+from django.urls import path
+from .views import (
+    InitiatePaymentView,
+    VerifyPaymentView,
+    PaymentWebhookView,
+    PaymentHistoryView,
+    PaymentDetailView,
+)
+
+app_name = "payments"
 
 urlpatterns = [
-    # TODO: Add payment endpoints
-    # path('webhook/paystack/', PaystackWebhookView.as_view(), name='paystack-webhook'),
-    # path('webhook/flutterwave/', FlutterwaveWebhookView.as_view(), name='flutterwave-webhook'),
-    # path('verify/<str:reference>/', VerifyPaymentView.as_view(), name='verify-payment'),
+    path("initiate/", InitiatePaymentView.as_view(), name="initiate"),
+    path("verify/<str:reference>/", VerifyPaymentView.as_view(), name="verify"),
+    path("webhook/", PaymentWebhookView.as_view(), name="webhook"),
+    path("history/", PaymentHistoryView.as_view(), name="history"),
+    path("<str:reference>/", PaymentDetailView.as_view(), name="detail"),
 ]

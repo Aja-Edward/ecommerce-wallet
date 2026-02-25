@@ -3,108 +3,122 @@
  * Types for wallet balance, transactions, and operations
  */
 
-/**
- * Transaction Types
- */
-export type TransactionType = 'CREDIT' | 'DEBIT';
+// ─── Transaction Enums ────────────────────────────────────────────────────────
 
+export type TransactionType   = 'CREDIT' | 'DEBIT';
 export type TransactionStatus = 'PENDING' | 'COMPLETED' | 'FAILED' | 'REVERSED';
-
-export type TransactionSource = 
-  | 'FUNDING' 
-  | 'ORDER_PAYMENT' 
-  | 'REFUND' 
-  | 'REVERSAL' 
+export type TransactionSource =
+  | 'FUNDING'
+  | 'ORDER_PAYMENT'
+  | 'REFUND'
+  | 'REVERSAL'
   | 'ADMIN_ADJUSTMENT';
 
-/**
- * Wallet Interface
- */
+/** Supported payment gateways */
+export type PaymentGateway = 'paystack' | 'flutterwave';
+
+// ─── Core Models ──────────────────────────────────────────────────────────────
+
 export interface Wallet {
   user: number;
   email: string;
   username: string;
-  balance: string; // Decimal as string to maintain precision
-  created_at: string; // ISO 8601 date string
-  updated_at: string; // ISO 8601 date string
+  balance: string;        // Decimal as string to maintain precision
+  created_at: string;     // ISO 8601
+  updated_at: string;     // ISO 8601
 }
 
-/**
- * Wallet Transaction Interface
- */
 export interface WalletTransaction {
   id: number;
   wallet: number;
   user_email: string;
   transaction_type: TransactionType;
-  amount: string; // Decimal as string
-  balance_before: string; // Decimal as string
-  balance_after: string; // Decimal as string
+  amount: string;         // Decimal as string
+  balance_before: string;
+  balance_after: string;
   status: TransactionStatus;
   source: TransactionSource;
-  reference: string; // Unique transaction reference
+  reference: string;
   description: string | null;
-  metadata: Record<string, any>; // JSON metadata
-  created_at: string; // ISO 8601 date string
-  updated_at: string; // ISO 8601 date string
+  metadata: Record<string, unknown>;
+  created_at: string;     // ISO 8601
+  updated_at: string;     // ISO 8601
 }
 
-/**
- * Transaction List Response
- */
+// ─── API Request / Response Shapes ───────────────────────────────────────────
+
 export interface TransactionListResponse {
   count: number;
   transactions: WalletTransaction[];
 }
 
-/**
- * Wallet Balance Response
- */
 export interface WalletBalanceResponse {
   balance: string;
   currency: string;
 }
 
 /**
- * Wallet Funding Request
+ * Matches the body your backend /api/payment/initiate/ expects.
+ * Uses `gateway` and `transaction_type` to match the actual API.
  */
 export interface WalletFundingRequest {
   amount: number;
-  payment_method: 'paystack' | 'flutterwave';
+  payment_method: PaymentGateway;
+  transaction_type: 'WALLET_FUNDING';
 }
 
 /**
- * Wallet Funding Response
+ * Matches the actual 201 response from /api/payment/initiate/
+ * { "message": "...", "payment": { "payment_url": "...", ... } }
  */
+export interface PaymentDetail {
+  id: string;
+  payment_method: string;
+  transaction_type: string;
+  amount: string;
+  currency: string;
+  reference: string;
+  gateway_reference: string | null;
+  status: TransactionStatus;
+  payment_url: string;
+  description: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+  webhook_received: boolean;
+}
+
 export interface WalletFundingResponse {
   message: string;
   transaction_reference: string;
+  payment_url: string;             // ← flat, not nested under "payment"
   amount: string;
   payment_method: string;
-  status: TransactionStatus;
-  next_step: string;
+  status: string;
 }
 
-/**
- * Wallet Debit Request (Internal)
- */
 export interface WalletDebitRequest {
   amount: number;
   description?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
-/**
- * Wallet Debit Response
- */
 export interface WalletDebitResponse {
   message: string;
   transaction: WalletTransaction;
 }
 
-/**
- * Wallet State (for Context/Redux)
- */
+// ─── Funding Form ─────────────────────────────────────────────────────────────
+
+export interface FundingForm {
+  amount: string;
+  gateway: PaymentGateway;
+  isLoading: boolean;
+}
+
+// ─── Context State ────────────────────────────────────────────────────────────
+
 export interface WalletState {
   wallet: Wallet | null;
   balance: string;
@@ -113,24 +127,30 @@ export interface WalletState {
   currentTransaction: WalletTransaction | null;
   isLoading: boolean;
   error: string | null;
+  fundingForm: FundingForm;
 }
 
-/**
- * Wallet Context Type
- */
 export interface WalletContextType extends WalletState {
+  // Data fetching
   fetchWallet: () => Promise<void>;
   fetchBalance: () => Promise<void>;
   fetchTransactions: (limit?: number) => Promise<void>;
   fetchTransactionByReference: (reference: string) => Promise<void>;
-  initiateFunding: (request: WalletFundingRequest) => Promise<WalletFundingResponse>;
   refreshWallet: () => Promise<void>;
+
+  // Funding form — managed entirely in context, no local state needed in components
+  setFundingAmount: (amount: string) => void;
+  setFundingGateway: (gateway: PaymentGateway) => void;
+  submitFunding: () => Promise<void>;
+
+  // Programmatic funding (for use outside the standard form flow)
+  initiateFunding: (request: WalletFundingRequest) => Promise<WalletFundingResponse>;
+
   clearError: () => void;
 }
 
-/**
- * Transaction Filter Options
- */
+// ─── Filters ─────────────────────────────────────────────────────────────────
+
 export interface TransactionFilters {
   type?: TransactionType;
   status?: TransactionStatus;
@@ -140,9 +160,8 @@ export interface TransactionFilters {
   limit?: number;
 }
 
-/**
- * Parsed Transaction (for UI display)
- */
+// ─── Parsed Transaction (UI layer) ───────────────────────────────────────────
+
 export interface ParsedTransaction extends WalletTransaction {
   amountNumber: number;
   balanceBeforeNumber: number;

@@ -1,10 +1,9 @@
-"""
-Payments App Configuration
-"""
 from django.apps import AppConfig
 
 
-class PaymentsConfig(AppConfig):
+class PaymentConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'payments'
-    verbose_name = 'Payment Gateway Integration'
+    name = "payments"
+
+    def ready(self):
+        import payments.signals  # noqa
