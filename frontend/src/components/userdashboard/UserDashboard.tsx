@@ -297,7 +297,7 @@
 //                 {initials}
 //               </div>
 //               <p className="text-white font-semibold">{user?.username}</p>
-//               <p className="text-gray-500 text-sm">{user?.email}</p>
+//               <p className="text-gray-500 text-sm">{user?.email}</p>o
 //             </div>
 
 //             {/* Detail rows */}
@@ -1023,13 +1023,6 @@ const Dashboard = () => {
 
   const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : '??';
 
-<<<<<<< HEAD
-  // Static data for demonstration
-  const walletBalance = '$77,571.93';
-  const totalIncome = '$12,478';
-  const totalExpenses = '$8,942';
-  const transactions = 1256;
-=======
   // ── Derived wallet display values ──────────────────────────────────────────
 
   const formattedBalance = walletLoading && !wallet
@@ -1048,7 +1041,6 @@ const Dashboard = () => {
     .reduce((sum, t) => sum + t.amountNumber, 0);
 
   // Static data (not yet backed by API)
->>>>>>> 2eccda63d9013d513b8839365617de42ddf45201
   const activeCards = 3;
   const pendingTasks = 852;
   const chartData = [

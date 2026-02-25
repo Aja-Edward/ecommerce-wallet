@@ -72,7 +72,7 @@ import { Navbar } from '../components/home/Navbar';
 import Footer from '../components/home/Footer';
 
 const Home = lazy(() => import('../pages/Landing/Home'));
-const Dashboard = lazy(() => import('../pages/dashboard/wallet'));
+const Dashboard = lazy(() => import('../pages/dashboard/Wallet'));
 const Privacy = lazy(() => import('../pages/Privacy/FirstPrivacypage'));
 const RegisterForm = lazy(() => import('../pages/Landing/Register'));
 const Login = lazy(() => import('../pages/Landing/Login'));
