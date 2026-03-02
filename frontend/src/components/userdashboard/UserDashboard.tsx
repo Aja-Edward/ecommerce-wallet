@@ -1,23 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useWallet } from '../../context/WalletContext';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { formatCurrency, formatDate, formatRelativeTime, parseTransaction } from '../../types/utils';
+import SendMoneyModal from './Sendmoneymodal';
+import type { WalletTransferRequest, WalletTransferResponse } from '../../types/wallet.types';
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-// Error Boundary Component
+const CHART_DATA = [
+  { month: 'Jan', income: 3200, expense: 2100 },
+  { month: 'Feb', income: 3800, expense: 2400 },
+  { month: 'Mar', income: 4200, expense: 2800 },
+  { month: 'Apr', income: 3600, expense: 2200 },
+  { month: 'May', income: 4500, expense: 3100 },
+  { month: 'Jun', income: 4800, expense: 2900 },
+];
+
+const NAV_ITEMS = [
+  { icon: '📊', label: 'Dashboard',    id: 'overview' },
+  { icon: '💳', label: 'My Cards',     id: 'cards',        count: 3 },
+  { icon: '📝', label: 'Invoices',     id: 'invoices' },
+  { icon: '💱', label: 'Transactions', id: 'transactions' },
+  { icon: '💰', label: 'Wallets',      id: 'wallets' },
+  { icon: '📈', label: 'Analytics',    id: 'analytics' },
+  { icon: '⚙️', label: 'Settings',     id: 'settings' },
+] as const;
+
+const TAB_ICONS: Record<string, string> = {
+  cards: '💳', invoices: '📝', analytics: '📈', settings: '⚙️',
+};
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api';
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 const Dashboard = () => {
-  console.log('🚀 Dashboard component rendering...');
-  console.log('📍 URL:', window.location.href);
-  console.log('🔍 Search params:', window.location.search);
-
-  const urlParams = new URLSearchParams(window.location.search);
-  const hasPaymentReturn = urlParams.has('payment_reference') || urlParams.has('reference');
-  console.log('💳 Payment return detected:', hasPaymentReturn);
-
   const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
-  console.log('👤 Auth state:', { isAuthenticated, authLoading, hasUser: !!user, username: user?.username });
-
   const {
     wallet,
     balance,
@@ -32,170 +50,119 @@ const Dashboard = () => {
     setFundingAmount,
     setFundingGateway,
     submitFunding,
+    submitTransfer,
   } = useWallet();
-  console.log('💰 Wallet state:', {
-    hasWallet: !!wallet,
-    balance,
-    transactionsCount: transactions?.length || 0,
-    walletLoading,
-    hasError: !!walletError
-  });
 
-  const [activeTab, setActiveTab] = useState('overview');
-  const [pageError, setPageError] = useState<string | null>(null);
+  const [activeTab, setActiveTab]       = useState('overview');
+  const [sendModalOpen, setSendModalOpen] = useState(false);
   const navigate = useNavigate();
 
-  console.log('✅ All hooks initialized successfully');
+  // ── Derived data ────────────────────────────────────────────────────────────
 
-  // ✅ MOVE useMemo HERE - BEFORE the early returns
-  const parsedTransactions = React.useMemo(() => {
+  const parsedTransactions = useMemo(() => {
     try {
-      console.log('🔄 Parsing transactions:', transactions.length);
       return transactions.map(parseTransaction);
-    } catch (error) {
-      console.error('💥 Error parsing transactions:', error);
+    } catch {
       return [];
     }
   }, [transactions]);
 
-  // ✅ MOVE all other derived state HERE
-  const totalCredits = parsedTransactions
-    .filter(t => t.isCredit && t.isCompleted)
-    .reduce((sum, t) => sum + t.amountNumber, 0);
+  const totalCredits = useMemo(
+    () => parsedTransactions.filter(t => t.isCredit && t.isCompleted).reduce((s, t) => s + t.amountNumber, 0),
+    [parsedTransactions]
+  );
 
-  const totalDebits = parsedTransactions
-    .filter(t => t.isDebit && t.isCompleted)
-    .reduce((sum, t) => sum + t.amountNumber, 0);
+  const totalDebits = useMemo(
+    () => parsedTransactions.filter(t => t.isDebit && t.isCompleted).reduce((s, t) => s + t.amountNumber, 0),
+    [parsedTransactions]
+  );
 
-  const activeCards = 3;
-  const pendingTasks = 852;
-  const chartData = [
-    { month: 'Jan', income: 3200, expense: 2100 },
-    { month: 'Feb', income: 3800, expense: 2400 },
-    { month: 'Mar', income: 4200, expense: 2800 },
-    { month: 'Apr', income: 3600, expense: 2200 },
-    { month: 'May', income: 4500, expense: 3100 },
-    { month: 'Jun', income: 4800, expense: 2900 },
-  ];
-  const maxValue = Math.max(...chartData.flatMap(d => [d.income, d.expense]));
+  const maxChartValue = Math.max(...CHART_DATA.flatMap(d => [d.income, d.expense]));
 
-  // ✅ MOVE useEffects HERE - BEFORE the early returns
+  // ── Effects ─────────────────────────────────────────────────────────────────
+
   useEffect(() => {
-    console.log('📥 Fetch wallet effect running...', { isAuthenticated });
     if (isAuthenticated) {
-      console.log('📥 Fetching wallet and transactions...');
       fetchWallet();
       fetchTransactions(5);
     }
   }, [isAuthenticated, fetchWallet, fetchTransactions]);
 
+  // Handle return from payment gateway (Paystack / Flutterwave redirect back)
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const reference = params.get('payment_reference') || params.get('reference');
-    const statusParam = params.get('status');
+    if (!isAuthenticated) return;
 
-    console.log('🔍 Verification effect:', { reference, statusParam, isAuthenticated });
+    const params    = new URLSearchParams(window.location.search);
+    const reference = params.get('payment_reference') ?? params.get('reference');
+    const status    = params.get('status');
 
-    if (reference && statusParam === 'completed' && isAuthenticated) {
-      console.log('✅ Initiating payment verification for:', reference);
-      verifyPaymentAndRefresh(reference);
-    }
+    if (!reference || status !== 'completed') return;
 
-    async function verifyPaymentAndRefresh(reference: string) {
+    verifyPaymentAndRefresh(reference);
+
+    async function verifyPaymentAndRefresh(ref: string) {
+      const token = sessionStorage.getItem('access_token');
+
+      // Always clear the query string, regardless of outcome
+      window.history.replaceState({}, '', '/dashboard');
+
+      if (!token) return;
+
       try {
-        const token = sessionStorage.getItem('access_token');
-        if (!token) {
-          console.error('❌ No access token found');
-          window.history.replaceState({}, '', '/dashboard');
-          return;
-        }
+        const res  = await fetch(`${API_BASE}/wallet/verify/${ref}/`, {
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
 
-        console.log('🔍 Verifying payment:', reference);
-
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/wallet/verify/${reference}/`,
-          {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-
-        const data = await response.json();
-        console.log('📦 Verification response:', data);
-
-        if (response.ok && data.status === 'COMPLETED') {
-          console.log('✅ Payment verified successfully');
-          window.history.replaceState({}, '', '/dashboard');
+        if (res.ok && data.status === 'COMPLETED') {
           await fetchWallet();
           await fetchTransactions(5);
           alert(`Payment successful! New balance: ${formatCurrency(data.new_balance, 'NGN')}`);
         } else {
-          console.error('❌ Payment verification failed:', data);
-          window.history.replaceState({}, '', '/dashboard');
-          alert('Payment verification failed. Please contact support if amount was debited.');
+          alert('Payment verification failed. Please contact support if an amount was debited.');
         }
-      } catch (error) {
-        console.error('💥 Error verifying payment:', error);
-        window.history.replaceState({}, '', '/dashboard');
+      } catch {
         alert('Error verifying payment. Please refresh the page or contact support.');
       }
     }
   }, [isAuthenticated, fetchWallet, fetchTransactions]);
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ✅ NOW the early returns can happen AFTER all hooks
-  // ═══════════════════════════════════════════════════════════════════════════
-  
+  // ── Auth guards ─────────────────────────────────────────────────────────────
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-400"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-400" />
       </div>
     );
   }
 
+  // Use <Navigate> instead of calling navigate() during render
   if (!isAuthenticated) {
-    navigate('/signin');
-    return null;
+    return <Navigate to="/signin" replace />;
   }
 
-  if (pageError) {
-    return (
-      <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center p-4">
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6 max-w-md">
-          <h2 className="text-red-400 font-bold text-xl mb-2">Error</h2>
-          <p className="text-gray-300 mb-4">{pageError}</p>
-          <button
-            onClick={() => {
-              setPageError(null);
-              window.history.replaceState({}, '', '/dashboard');
-              window.location.reload();
-            }}
-            className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // ── Helpers ─────────────────────────────────────────────────────────────────
 
   const handleLogout = () => {
     logout();
     navigate('/signin');
   };
 
-  const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : '??';
+  const initials        = user?.username ? user.username.slice(0, 2).toUpperCase() : '??';
   const formattedBalance = walletLoading && !wallet ? '...' : formatCurrency(balance, 'NGN');
 
+  const creditCount = parsedTransactions.filter(t => t.isCredit).length;
+  const debitCount  = parsedTransactions.filter(t => t.isDebit).length;
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-gray-100" style={{ fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif" }}>
-
-      {/* Sidebar */}
+    <div
+      className="min-h-screen bg-[#0a0f1e] text-gray-100"
+      style={{ fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif" }}
+    >
+      {/* ── Sidebar ─────────────────────────────────────────────────────────── */}
       <aside className="fixed left-0 top-0 h-screen w-64 bg-[#0f1629] border-r border-gray-800/50 flex flex-col z-20">
         {/* Logo */}
         <div className="h-20 flex items-center px-6 border-b border-gray-800/50">
@@ -207,7 +174,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* User Profile */}
+        {/* User profile */}
         <div className="px-6 py-6 border-b border-gray-800/50">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold ring-2 ring-blue-500/20">
@@ -222,17 +189,9 @@ const Dashboard = () => {
 
         {/* Navigation */}
         <nav className="flex-1 px-4 py-6 space-y-1">
-          {[
-            { icon: '📊', label: 'Dashboard', id: 'overview' },
-            { icon: '💳', label: 'My Cards', id: 'cards', count: 3 },
-            { icon: '📝', label: 'Invoices', id: 'invoices' },
-            { icon: '💱', label: 'Transactions', id: 'transactions' },
-            { icon: '💰', label: 'Wallets', id: 'wallets' },
-            { icon: '📈', label: 'Analytics', id: 'analytics' },
-            { icon: '⚙️', label: 'Settings', id: 'settings' },
-          ].map((item) => (
+          {NAV_ITEMS.map((item) => (
             <button
-              key={item.label}
+              key={item.id}
               onClick={() => setActiveTab(item.id)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                 activeTab === item.id
@@ -242,7 +201,7 @@ const Dashboard = () => {
             >
               <span className="text-lg">{item.icon}</span>
               <span className="text-sm font-medium flex-1 text-left">{item.label}</span>
-              {item.count && (
+              {'count' in item && (
                 <span className="px-2 py-0.5 bg-gray-800 rounded-md text-xs text-gray-400">
                   {item.count}
                 </span>
@@ -263,9 +222,9 @@ const Dashboard = () => {
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* ── Main content ─────────────────────────────────────────────────────── */}
       <div className="ml-64">
-        {/* Top Header */}
+        {/* Header */}
         <header className="h-20 border-b border-gray-800/50 bg-[#0f1629]/80 backdrop-blur-sm sticky top-0 z-10">
           <div className="h-full px-8 flex items-center justify-between">
             <div>
@@ -286,9 +245,9 @@ const Dashboard = () => {
               </div>
               <button className="relative p-2 rounded-xl bg-gray-800/50 hover:bg-gray-800 transition-colors">
                 <span className="text-xl">🔔</span>
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
               </button>
-              <button className="relative p-2 rounded-xl bg-gray-800/50 hover:bg-gray-800 transition-colors">
+              <button className="p-2 rounded-xl bg-gray-800/50 hover:bg-gray-800 transition-colors">
                 <span className="text-xl">💬</span>
               </button>
               <button className="p-2 rounded-xl bg-gray-800/50 hover:bg-gray-800 transition-colors">
@@ -302,46 +261,37 @@ const Dashboard = () => {
           </div>
         </header>
 
-        {/* Dashboard Content */}
         <main className="p-8">
-
-          {/* ── Wallet Error Banner ─────────────────────────────────────────── */}
+          {/* Wallet error banner */}
           {walletError && (
             <div className="mb-6 flex items-center justify-between px-5 py-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
               <div className="flex items-center gap-2">
                 <span>⚠️</span>
                 <span>{walletError}</span>
               </div>
-              <button
-                onClick={clearError}
-                className="text-red-400 hover:text-red-300 font-medium ml-4"
-              >
+              <button onClick={clearError} className="text-red-400 hover:text-red-300 font-medium ml-4">
                 Dismiss
               </button>
             </div>
           )}
 
-          {/* ── Overview Tab ────────────────────────────────────────────────── */}
+          {/* ── Overview tab ──────────────────────────────────────────────── */}
           {activeTab === 'overview' && (
             <div className="grid grid-cols-12 gap-6">
 
-              {/* Left Section */}
+              {/* Left section */}
               <div className="col-span-8 space-y-6">
 
-                {/* Top Stats Row */}
+                {/* Stats row */}
                 <div className="grid grid-cols-3 gap-4">
-
-                  {/* Total Credits */}
                   <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl p-5 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16" />
                     <div className="relative z-10">
                       <p className="text-orange-100 text-sm font-medium mb-1">Total Income</p>
                       {walletLoading && !wallet ? (
                         <div className="h-9 w-28 bg-white/20 rounded-lg animate-pulse mb-1" />
                       ) : (
-                        <p className="text-white text-3xl font-bold mb-1">
-                          {formatCurrency(totalCredits, 'NGN')}
-                        </p>
+                        <p className="text-white text-3xl font-bold mb-1">{formatCurrency(totalCredits, 'NGN')}</p>
                       )}
                       <div className="flex items-center gap-1 text-orange-100 text-xs">
                         <span>↗</span>
@@ -350,17 +300,14 @@ const Dashboard = () => {
                     </div>
                   </div>
 
-                  {/* Total Debits */}
                   <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-5 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16" />
                     <div className="relative z-10">
                       <p className="text-emerald-100 text-sm font-medium mb-1">Total Expenses</p>
                       {walletLoading && !wallet ? (
                         <div className="h-9 w-28 bg-white/20 rounded-lg animate-pulse mb-1" />
                       ) : (
-                        <p className="text-white text-3xl font-bold mb-1">
-                          {formatCurrency(totalDebits, 'NGN')}
-                        </p>
+                        <p className="text-white text-3xl font-bold mb-1">{formatCurrency(totalDebits, 'NGN')}</p>
                       )}
                       <div className="flex items-center gap-1 text-emerald-100 text-xs">
                         <span>↘</span>
@@ -369,12 +316,11 @@ const Dashboard = () => {
                     </div>
                   </div>
 
-                  {/* Active Cards (static for now) */}
                   <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-5 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16" />
                     <div className="relative z-10">
                       <p className="text-purple-100 text-sm font-medium mb-1">Active Cards</p>
-                      <p className="text-white text-3xl font-bold mb-1">{activeCards}</p>
+                      <p className="text-white text-3xl font-bold mb-1">3</p>
                       <div className="flex items-center gap-1 text-purple-100 text-xs">
                         <span>💳</span>
                         <span>Visa, Mastercard</span>
@@ -383,11 +329,10 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                {/* Wallet Balance Card */}
+                {/* Balance card */}
                 <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-6 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32"></div>
-                  <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full -ml-24 -mb-24"></div>
-
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32" />
+                  <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full -ml-24 -mb-24" />
                   <div className="relative z-10">
                     <div className="flex items-start justify-between mb-8">
                       <div>
@@ -395,9 +340,7 @@ const Dashboard = () => {
                         {walletLoading && !wallet ? (
                           <div className="h-14 w-52 bg-white/20 rounded-xl animate-pulse" />
                         ) : (
-                          <p className="text-white text-5xl font-bold tracking-tight">
-                            {formattedBalance}
-                          </p>
+                          <p className="text-white text-5xl font-bold tracking-tight">{formattedBalance}</p>
                         )}
                         {wallet && (
                           <p className="text-blue-200 text-xs mt-2">
@@ -420,7 +363,6 @@ const Dashboard = () => {
                         </button>
                       </div>
                     </div>
-
                     <div className="flex items-center gap-4">
                       <button
                         onClick={() => setActiveTab('wallets')}
@@ -445,16 +387,20 @@ const Dashboard = () => {
                   <div className="flex items-center gap-4 mb-4">
                     {[
                       { name: 'Sarah', initials: 'SM', color: 'from-pink-500 to-rose-500' },
-                      { name: 'John', initials: 'JD', color: 'from-blue-500 to-cyan-500' },
-                      { name: 'Emma', initials: 'EW', color: 'from-purple-500 to-pink-500' },
-                      { name: 'Mike', initials: 'MJ', color: 'from-orange-500 to-red-500' },
+                      { name: 'John',  initials: 'JD', color: 'from-blue-500 to-cyan-500' },
+                      { name: 'Emma',  initials: 'EW', color: 'from-purple-500 to-pink-500' },
+                      { name: 'Mike',  initials: 'MJ', color: 'from-orange-500 to-red-500' },
                     ].map((contact) => (
-                      <div key={contact.name} className="flex flex-col items-center gap-2 cursor-pointer group">
+                      <button
+                        key={contact.name}
+                        onClick={() => setSendModalOpen(true)}
+                        className="flex flex-col items-center gap-2 group"
+                      >
                         <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${contact.color} flex items-center justify-center text-white font-semibold ring-2 ring-transparent group-hover:ring-emerald-500 transition-all`}>
                           {contact.initials}
                         </div>
                         <span className="text-xs text-gray-400">{contact.name}</span>
-                      </div>
+                      </button>
                     ))}
                     <button className="w-14 h-14 rounded-full bg-gray-800/50 hover:bg-gray-800 flex items-center justify-center text-2xl text-gray-400 transition-colors">
                       +
@@ -464,20 +410,25 @@ const Dashboard = () => {
                   <div className="flex gap-3">
                     <input
                       type="text"
-                      placeholder="Enter amount"
+                      placeholder="Enter username or amount"
                       className="flex-1 px-4 py-3 bg-gray-800/50 border border-gray-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500/50"
+                      onFocus={() => setSendModalOpen(true)}
+                      readOnly
                     />
-                    <button className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-medium transition-colors">
+                    <button
+                      onClick={() => setSendModalOpen(true)}
+                      className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-medium transition-colors"
+                    >
                       Send
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Right Section */}
+              {/* Right section */}
               <div className="col-span-4 space-y-6">
 
-                {/* Card Overview Donut */}
+                {/* Donut chart */}
                 <div className="bg-[#0f1629] border border-gray-800/50 rounded-2xl p-6">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-semibold text-white">Card Overview</h3>
@@ -492,12 +443,9 @@ const Dashboard = () => {
                     <div className="relative w-40 h-40">
                       <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                         <circle cx="50" cy="50" r="35" fill="none" stroke="#1f2937" strokeWidth="12" />
-                        <circle cx="50" cy="50" r="35" fill="none" stroke="#f97316" strokeWidth="12"
-                          strokeDasharray="77 220" strokeDashoffset="0" className="transition-all duration-1000" />
-                        <circle cx="50" cy="50" r="35" fill="none" stroke="#3b82f6" strokeWidth="12"
-                          strokeDasharray="88 220" strokeDashoffset="-77" className="transition-all duration-1000" />
-                        <circle cx="50" cy="50" r="35" fill="none" stroke="#10b981" strokeWidth="12"
-                          strokeDasharray="55 220" strokeDashoffset="-165" className="transition-all duration-1000" />
+                        <circle cx="50" cy="50" r="35" fill="none" stroke="#f97316" strokeWidth="12" strokeDasharray="77 220" strokeDashoffset="0"    className="transition-all duration-1000" />
+                        <circle cx="50" cy="50" r="35" fill="none" stroke="#3b82f6" strokeWidth="12" strokeDasharray="88 220" strokeDashoffset="-77"   className="transition-all duration-1000" />
+                        <circle cx="50" cy="50" r="35" fill="none" stroke="#10b981" strokeWidth="12" strokeDasharray="55 220" strokeDashoffset="-165"  className="transition-all duration-1000" />
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
                         <p className="text-2xl font-bold text-white">76%</p>
@@ -508,11 +456,11 @@ const Dashboard = () => {
                     <div className="grid grid-cols-3 gap-4 w-full mt-6">
                       {[
                         { color: 'bg-orange-500', label: 'Shopping', value: '35%' },
-                        { color: 'bg-blue-500', label: 'Bills', value: '40%' },
-                        { color: 'bg-emerald-500', label: 'Food', value: '25%' },
+                        { color: 'bg-blue-500',   label: 'Bills',    value: '40%' },
+                        { color: 'bg-emerald-500', label: 'Food',    value: '25%' },
                       ].map(item => (
                         <div key={item.label} className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full ${item.color}`}></div>
+                          <div className={`w-3 h-3 rounded-full ${item.color}`} />
                           <div>
                             <p className="text-xs text-gray-500">{item.label}</p>
                             <p className="text-sm font-semibold text-white">{item.value}</p>
@@ -523,18 +471,18 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                {/* Activity Chart */}
+                {/* Activity chart */}
                 <div className="bg-[#0f1629] border border-gray-800/50 rounded-2xl p-6">
                   <div className="flex items-center justify-between mb-6">
                     <div>
                       <h3 className="text-lg font-semibold text-white">Activity</h3>
                       <div className="flex items-center gap-4 mt-2">
                         <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                          <div className="w-3 h-3 rounded-full bg-emerald-500" />
                           <span className="text-xs text-gray-400">Income</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                          <div className="w-3 h-3 rounded-full bg-orange-500" />
                           <span className="text-xs text-gray-400">Expense</span>
                         </div>
                       </div>
@@ -547,13 +495,17 @@ const Dashboard = () => {
                   </div>
 
                   <div className="flex items-end justify-between gap-2 h-32">
-                    {chartData.map((data, index) => (
-                      <div key={index} className="flex-1 flex flex-col items-center gap-1">
+                    {CHART_DATA.map((data, i) => (
+                      <div key={i} className="flex-1 flex flex-col items-center gap-1">
                         <div className="w-full flex items-end justify-center gap-1 h-24">
-                          <div className="w-2 bg-emerald-500 rounded-t transition-all duration-500 hover:bg-emerald-400"
-                            style={{ height: `${(data.income / maxValue) * 100}%` }}></div>
-                          <div className="w-2 bg-orange-500 rounded-t transition-all duration-500 hover:bg-orange-400"
-                            style={{ height: `${(data.expense / maxValue) * 100}%` }}></div>
+                          <div
+                            className="w-2 bg-emerald-500 rounded-t transition-all duration-500 hover:bg-emerald-400"
+                            style={{ height: `${(data.income / maxChartValue) * 100}%` }}
+                          />
+                          <div
+                            className="w-2 bg-orange-500 rounded-t transition-all duration-500 hover:bg-orange-400"
+                            style={{ height: `${(data.expense / maxChartValue) * 100}%` }}
+                          />
                         </div>
                         <span className="text-xs text-gray-500">{data.month}</span>
                       </div>
@@ -562,36 +514,26 @@ const Dashboard = () => {
 
                   <div className="flex items-center justify-between mt-6 pt-6 border-t border-gray-800/50">
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Average per Txn</p>
+                      <p className="text-xs text-gray-500 mb-1">Avg per Credit</p>
                       <p className="text-lg font-bold text-emerald-400">
-                        {formatCurrency(
-                          parsedTransactions.filter(t => t.isCredit).length > 0
-                            ? totalCredits / parsedTransactions.filter(t => t.isCredit).length
-                            : 0,
-                          'NGN'
-                        )}
+                        {formatCurrency(creditCount > 0 ? totalCredits / creditCount : 0, 'NGN')}
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs text-gray-500 mb-1">Average per Txn</p>
+                      <p className="text-xs text-gray-500 mb-1">Avg per Debit</p>
                       <p className="text-lg font-bold text-orange-400">
-                        {formatCurrency(
-                          parsedTransactions.filter(t => t.isDebit).length > 0
-                            ? totalDebits / parsedTransactions.filter(t => t.isDebit).length
-                            : 0,
-                          'NGN'
-                        )}
+                        {formatCurrency(debitCount > 0 ? totalDebits / debitCount : 0, 'NGN')}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Pending Tasks */}
+                {/* Pending tasks */}
                 <div className="bg-gradient-to-br from-cyan-600 to-blue-700 rounded-2xl p-5 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16" />
                   <div className="relative z-10">
                     <p className="text-cyan-100 text-sm font-medium mb-1">Pending Tasks</p>
-                    <p className="text-white text-3xl font-bold mb-1">{pendingTasks}</p>
+                    <p className="text-white text-3xl font-bold mb-1">852</p>
                     <div className="flex items-center gap-1 text-cyan-100 text-xs">
                       <span>📋</span>
                       <span>Complete today</span>
@@ -600,7 +542,7 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              {/* Transaction Overview - Full Width */}
+              {/* Transaction overview — full width */}
               <div className="col-span-12 bg-[#0f1629] border border-gray-800/50 rounded-2xl p-6">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-lg font-semibold text-white">Transaction Overview</h3>
@@ -616,17 +558,16 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                {/* Loading skeleton */}
                 {walletLoading && transactions.length === 0 ? (
                   <div className="space-y-3">
-                    {[...Array(5)].map((_, i) => (
+                    {Array.from({ length: 5 }).map((_, i) => (
                       <div key={i} className="flex items-center gap-4 px-4 py-3 animate-pulse">
-                        <div className="w-10 h-10 rounded-xl bg-gray-800"></div>
+                        <div className="w-10 h-10 rounded-xl bg-gray-800" />
                         <div className="flex-1 space-y-2">
-                          <div className="h-3 bg-gray-800 rounded w-32"></div>
-                          <div className="h-2 bg-gray-800 rounded w-20"></div>
+                          <div className="h-3 bg-gray-800 rounded w-32" />
+                          <div className="h-2 bg-gray-800 rounded w-20" />
                         </div>
-                        <div className="h-3 bg-gray-800 rounded w-20"></div>
+                        <div className="h-3 bg-gray-800 rounded w-20" />
                       </div>
                     ))}
                   </div>
@@ -636,65 +577,64 @@ const Dashboard = () => {
                     <p className="text-sm">No transactions yet</p>
                   </div>
                 ) : (
-                  <div className="overflow-hidden">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-gray-800/50">
-                          <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction</th>
-                          <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                          <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                          <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                          <th className="text-center py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {parsedTransactions.map((txn) => (
-                          <tr key={txn.id} className="border-b border-gray-800/30 hover:bg-gray-800/20 transition-colors">
-                            <td className="py-4 px-4">
-                              <div className="flex items-center gap-3">
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold ${
-                                  txn.isCredit
-                                    ? 'bg-emerald-500/10 text-emerald-400'
-                                    : 'bg-red-500/10 text-red-400'
-                                }`}>
-                                  {txn.isCredit ? '↓' : '↑'}
-                                </div>
-                                <div>
-                                  <p className="font-medium text-white text-sm">
-                                    {txn.description ?? txn.source.replace('_', ' ')}
-                                  </p>
-                                  <p className="text-xs text-gray-500 font-mono">
-                                    {txn.reference.slice(0, 16)}…
-                                  </p>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="py-4 px-4">
-                              <span className="text-sm text-gray-400">{txn.source.replace('_', ' ')}</span>
-                            </td>
-                            <td className="py-4 px-4">
-                              <span className="text-sm text-gray-400">{formatRelativeTime(txn.created_at)}</span>
-                            </td>
-                            <td className="py-4 px-4 text-right">
-                              <span className={`font-semibold ${txn.isCredit ? 'text-emerald-400' : 'text-red-400'}`}>
-                                {txn.isCredit ? '+' : '-'}{formatCurrency(txn.amountNumber, 'NGN')}
-                              </span>
-                            </td>
-                            <td className="py-4 px-4 text-center">
-                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                                txn.isCompleted ? 'bg-emerald-500/10 text-emerald-400'
-                                : txn.isPending  ? 'bg-orange-500/10 text-orange-400'
-                                : txn.isFailed   ? 'bg-red-500/10 text-red-400'
-                                : 'bg-gray-500/10 text-gray-400'
-                              }`}>
-                                {txn.status.toLowerCase()}
-                              </span>
-                            </td>
-                          </tr>
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-800/50">
+                        {['Transaction', 'Type', 'Date', 'Amount', 'Status'].map((h, i) => (
+                          <th
+                            key={h}
+                            className={`py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider ${
+                              i === 3 ? 'text-right' : i === 4 ? 'text-center' : 'text-left'
+                            }`}
+                          >
+                            {h}
+                          </th>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsedTransactions.map((txn) => (
+                        <tr key={txn.id} className="border-b border-gray-800/30 hover:bg-gray-800/20 transition-colors">
+                          <td className="py-4 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold ${
+                                txn.isCredit ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                              }`}>
+                                {txn.isCredit ? '↓' : '↑'}
+                              </div>
+                              <div>
+                                <p className="font-medium text-white text-sm">
+                                  {txn.description ?? txn.source.replace('_', ' ')}
+                                </p>
+                                <p className="text-xs text-gray-500 font-mono">{txn.reference.slice(0, 16)}…</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4 px-4">
+                            <span className="text-sm text-gray-400">{txn.source.replace('_', ' ')}</span>
+                          </td>
+                          <td className="py-4 px-4">
+                            <span className="text-sm text-gray-400">{formatRelativeTime(txn.created_at)}</span>
+                          </td>
+                          <td className="py-4 px-4 text-right">
+                            <span className={`font-semibold ${txn.isCredit ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {txn.isCredit ? '+' : '-'}{formatCurrency(txn.amountNumber, 'NGN')}
+                            </span>
+                          </td>
+                          <td className="py-4 px-4 text-center">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                              txn.isCompleted ? 'bg-emerald-500/10 text-emerald-400'
+                              : txn.isPending ? 'bg-orange-500/10 text-orange-400'
+                              : txn.isFailed  ? 'bg-red-500/10 text-red-400'
+                              : 'bg-gray-500/10 text-gray-400'
+                            }`}>
+                              {txn.status.toLowerCase()}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 )}
 
                 <div className="mt-6 pt-6 border-t border-gray-800/50 flex items-center justify-between">
@@ -712,12 +652,11 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* ── Wallets Tab ─────────────────────────────────────────────────── */}
+          {/* ── Wallets tab ────────────────────────────────────────────────── */}
           {activeTab === 'wallets' && (
             <div className="space-y-6">
-              {/* Balance summary */}
               <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-8 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32"></div>
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32" />
                 <div className="relative z-10">
                   <p className="text-blue-100 text-sm font-medium mb-2">Available Balance</p>
                   {walletLoading && !wallet ? (
@@ -726,14 +665,11 @@ const Dashboard = () => {
                     <p className="text-white text-6xl font-bold tracking-tight">{formattedBalance}</p>
                   )}
                   {wallet && (
-                    <p className="text-blue-200 text-sm mt-3">
-                      Last updated {formatDate(wallet.updated_at)}
-                    </p>
+                    <p className="text-blue-200 text-sm mt-3">Last updated {formatDate(wallet.updated_at)}</p>
                   )}
                 </div>
               </div>
 
-              {/* Fund wallet form */}
               <div className="bg-[#0f1629] border border-gray-800/50 rounded-2xl p-6">
                 <h3 className="text-lg font-semibold text-white mb-4">Fund Wallet</h3>
                 <div className="space-y-4 max-w-md">
@@ -764,14 +700,14 @@ const Dashboard = () => {
                     disabled={fundingForm.isLoading || !fundingForm.amount || Number(fundingForm.amount) < 100}
                     className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-colors"
                   >
-                    {fundingForm.isLoading ? 'Processing...' : 'Proceed to Payment'}
+                    {fundingForm.isLoading ? 'Processing…' : 'Proceed to Payment'}
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ── Transactions Tab ────────────────────────────────────────────── */}
+          {/* ── Transactions tab ───────────────────────────────────────────── */}
           {activeTab === 'transactions' && (
             <div className="bg-[#0f1629] border border-gray-800/50 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-6">
@@ -787,14 +723,14 @@ const Dashboard = () => {
 
               {walletLoading && transactions.length === 0 ? (
                 <div className="space-y-3">
-                  {[...Array(8)].map((_, i) => (
+                  {Array.from({ length: 8 }).map((_, i) => (
                     <div key={i} className="flex items-center gap-4 px-4 py-3 animate-pulse">
-                      <div className="w-10 h-10 rounded-xl bg-gray-800"></div>
+                      <div className="w-10 h-10 rounded-xl bg-gray-800" />
                       <div className="flex-1 space-y-2">
-                        <div className="h-3 bg-gray-800 rounded w-40"></div>
-                        <div className="h-2 bg-gray-800 rounded w-24"></div>
+                        <div className="h-3 bg-gray-800 rounded w-40" />
+                        <div className="h-2 bg-gray-800 rounded w-24" />
                       </div>
-                      <div className="h-3 bg-gray-800 rounded w-24"></div>
+                      <div className="h-3 bg-gray-800 rounded w-24" />
                     </div>
                   ))}
                 </div>
@@ -814,13 +750,16 @@ const Dashboard = () => {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-800/50">
-                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Reference</th>
-                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
-                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                      <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                      <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Balance After</th>
-                      <th className="text-center py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      {['Reference', 'Description', 'Source', 'Date', 'Amount', 'Balance After', 'Status'].map((h, i) => (
+                        <th
+                          key={h}
+                          className={`py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider ${
+                            i === 4 || i === 5 ? 'text-right' : i === 6 ? 'text-center' : 'text-left'
+                          }`}
+                        >
+                          {h}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
@@ -851,8 +790,8 @@ const Dashboard = () => {
                         <td className="py-4 px-4 text-center">
                           <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
                             txn.isCompleted ? 'bg-emerald-500/10 text-emerald-400'
-                            : txn.isPending  ? 'bg-orange-500/10 text-orange-400'
-                            : txn.isFailed   ? 'bg-red-500/10 text-red-400'
+                            : txn.isPending ? 'bg-orange-500/10 text-orange-400'
+                            : txn.isFailed  ? 'bg-red-500/10 text-red-400'
                             : 'bg-gray-500/10 text-gray-400'
                           }`}>
                             {txn.status.toLowerCase()}
@@ -872,21 +811,30 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* ── Remaining tabs (coming soon) ─────────────────────────────────── */}
+          {/* ── Coming soon tabs ───────────────────────────────────────────── */}
           {['cards', 'invoices', 'analytics', 'settings'].includes(activeTab) && (
             <div className="bg-[#0f1629] border border-gray-800/50 rounded-2xl p-8 text-center">
-              <span className="text-6xl mb-4 block">
-                {({ cards: '💳', invoices: '📝', analytics: '📈', settings: '⚙️' } as Record<string, string>)[activeTab]}
-              </span>
+              <span className="text-6xl mb-4 block">{TAB_ICONS[activeTab]}</span>
               <h3 className="text-2xl font-bold text-white mb-2 capitalize">{activeTab}</h3>
               <p className="text-gray-400">This feature is coming soon!</p>
             </div>
           )}
         </main>
       </div>
+
+      {/* ── Send Money Modal ─────────────────────────────────────────────────── */}
+      <SendMoneyModal
+        isOpen={sendModalOpen}
+        onClose={() => setSendModalOpen(false)}
+        currentBalance={balance}
+        submitTransfer={submitTransfer}
+        onTransferSuccess={() => {
+          fetchWallet();
+          fetchTransactions(5);
+        }}
+      />
     </div>
   );
 };
 
-// Export with Error Boundary
 export default Dashboard;

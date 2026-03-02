@@ -22,6 +22,11 @@ from .services import WalletService
 from payments.gateways.paystack import PaystackGateway
 from payments.gateways.flutterwave import FlutterwaveGateway
 
+from django.contrib.auth import get_user_model
+from django.db.models import Q
+
+User = get_user_model()
+
 logger = logging.getLogger(__name__)
 
 class WalletDetailView(APIView):
@@ -79,6 +84,46 @@ class WalletTransactionListView(APIView):
                 {"error": f"Failed to retrieve transactions: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class WalletUserLookupView(APIView):
+    """
+    GET: Lookup a user by username or email
+    """
+
+    authentication_classes = [SupabaseJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        query = request.query_params.get("username")
+
+        if not query:
+            return Response(
+                {"error": "username or email query parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = (
+            User.objects.filter(Q(username__iexact=query) | Q(email__iexact=query))
+            .exclude(id=request.user.id)  # optional: prevent self lookup
+            .values("id", "username", "email")
+            .first()
+        )
+
+        if not user:
+            return Response(
+                {"error": "User not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(
+            {
+                "id": user["id"],
+                "username": user["username"],
+                "email": user["email"],
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class WalletTransactionDetailView(APIView):

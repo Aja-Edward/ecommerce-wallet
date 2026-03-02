@@ -12,6 +12,10 @@ import type {
   WalletFundingResponse,
   WalletDebitRequest,
   WalletDebitResponse,
+  WalletTransferRequest,
+  WalletTransferResponse,
+  WalletUserLookupResponse,
+
 } from '../types/wallet.types';
 
 import type { ApiError } from '../types/api.types';
@@ -139,6 +143,32 @@ const WalletService = {
     });
   },
 
+   /**
+   * GET /wallet/lookup-user/?username=
+   * Look up a wallet user by username before initiating a transfer.
+   * Returns display_name if the user exists and has an active wallet.
+   */
+  lookupUser(username: string): Promise<WalletUserLookupResponse> {
+    return walletFetch<WalletUserLookupResponse>(`${WALLET_BASE}/lookup-user/`, {
+      params: { username },
+    });
+  },
+
+  // * POST /wallet/transfer/
+//    * Transfer funds from the authenticated user's wallet to another user's wallet.
+//    *
+//    * Expected backend behaviour:
+//    * - Debit sender atomically, credit recipient.
+//    * - Create a WalletTransaction record for each side.
+//    * - Return the sender's new_balance so the UI can update without an extra fetch.
+//    */
+  transferFunds(request: WalletTransferRequest): Promise<WalletTransferResponse> {
+    return walletFetch<WalletTransferResponse>(`${WALLET_BASE}/transfer/`, {
+      method: 'POST',
+      body: request,
+    });
+  },
+
   /**
    * POST /wallet/debit/
    * Internal endpoint — debit the wallet (used by order/checkout flows).
@@ -151,6 +181,8 @@ const WalletService = {
     });
   },
 };
+
+
 
 export default WalletService;
 

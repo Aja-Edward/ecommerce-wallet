@@ -10,6 +10,8 @@ import React, {
   useCallback,
   useContext,
   useReducer,
+  useRef,
+  useEffect,
   useMemo,
   type ReactNode,
 } from 'react';
@@ -21,6 +23,8 @@ import type {
   WalletContextType,
   WalletFundingRequest,
   WalletFundingResponse,
+  WalletTransferRequest,
+  WalletTransferResponse,
   PaymentGateway,
 } from '../types/wallet.types';
 
@@ -95,7 +99,12 @@ function walletReducer(state: WalletState, action: WalletAction): WalletState {
       };
 
     case 'SET_CURRENT_TRANSACTION':
-      return { ...state, currentTransaction: action.payload, isLoading: false, error: null };
+      return {
+        ...state,
+        currentTransaction: action.payload,
+        isLoading: false,
+        error: null,
+      };
 
     case 'CLEAR_ERROR':
       return { ...state, error: null };
@@ -217,7 +226,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
     [handleError, fetchTransactions]
   );
 
-  // ── Funding form actions ───────────────────────────────────────────────────
+  // ── Funding form ───────────────────────────────────────────────────────────
 
   const setFundingAmount = useCallback((amount: string) => {
     dispatch({ type: 'SET_FUNDING_FORM', payload: { amount } });
@@ -228,56 +237,100 @@ export function WalletProvider({ children }: WalletProviderProps) {
   }, []);
 
   /**
-   * Submit the funding form.
-   * Validates, calls the API, resets the form, then redirects to the
-   * payment gateway checkout page using window.location.href.
-   *
-   * NOTE: useNavigate() must NOT be called inside a useCallback —
-   * it is a hook and can only be called at the top level of a component
-   * or provider. We use window.location.href here intentionally because
-   * the redirect is to an external payment gateway URL (Paystack / Flutterwave),
-   * not an internal React route.
+   * A ref mirror of fundingForm prevents stale closure reads inside
+   * submitFunding without adding fundingForm to its dependency array
+   * (which would recreate the callback on every keystroke).
    */
-  const fundingFormRef = React.useRef(state.fundingForm);
+  const fundingFormRef = useRef(state.fundingForm);
+  useEffect(() => {
+    fundingFormRef.current = state.fundingForm;
+  }, [state.fundingForm]);
 
-  React.useEffect(() => {
-      fundingFormRef.current = state.fundingForm;
-    }, [state.fundingForm]);
+  /**
+   * Submit the funding form.
+   * Validates → calls API → resets form → redirects to the external
+   * payment gateway URL via window.location.href.
+   *
+   * window.location.href is intentional: Paystack / Flutterwave checkout
+   * pages are external URLs, not internal React routes.
+   */
   const submitFunding = useCallback(async () => {
-  const { amount, gateway } = fundingFormRef.current; // ← reads latest value, not stale closure
+    const { amount, gateway } = fundingFormRef.current;
 
-  console.log('🔍 Submitting with gateway:', gateway); // temporary debug log
-
-  if (!amount || Number(amount) < 100) {
-    dispatch({ type: 'SET_ERROR', payload: 'Minimum funding amount is ₦100.' });
-    return;
-  }
-
-  dispatch({ type: 'SET_FUNDING_LOADING', payload: true });
-
-  try {
-    const response = await WalletService.initiateFunding({
-      amount: Number(amount),
-      payment_method: gateway,
-      transaction_type: 'WALLET_FUNDING',
-    });
-
-    dispatch({ type: 'RESET_FUNDING_FORM' });
-    await fetchTransactions();
-
-    const paymentUrl = response.payment_url;
-
-    if (!paymentUrl) {
-      dispatch({ type: 'SET_ERROR', payload: 'Payment URL not received. Please try again.' });
+    if (!amount || Number(amount) < 100) {
+      dispatch({ type: 'SET_ERROR', payload: 'Minimum funding amount is ₦100.' });
       return;
     }
 
-    window.location.href = paymentUrl;
-  } catch (err) {
-    handleError(err);
-    dispatch({ type: 'SET_FUNDING_LOADING', payload: false });
-  }
-}, [handleError, fetchTransactions]); 
+    dispatch({ type: 'SET_FUNDING_LOADING', payload: true });
+
+    try {
+      const response = await WalletService.initiateFunding({
+        amount: Number(amount),
+        payment_method: gateway,
+        transaction_type: 'WALLET_FUNDING',
+      });
+
+      dispatch({ type: 'RESET_FUNDING_FORM' });
+      await fetchTransactions();
+
+      if (!response.payment_url) {
+        dispatch({ type: 'SET_ERROR', payload: 'Payment URL not received. Please try again.' });
+        return;
+      }
+
+      window.location.href = response.payment_url;
+    } catch (err) {
+      handleError(err);
+      dispatch({ type: 'SET_FUNDING_LOADING', payload: false });
+    }
+  }, [handleError, fetchTransactions]);
+
+  // ── Wallet-to-wallet transfer ──────────────────────────────────────────────
+
+  /**
+   * Transfer funds from the authenticated user's wallet to another user.
+   * On success, the context balance is updated immediately from the
+   * response's new_balance — no extra GET /wallet/ round-trip needed.
+   *
+   * The caller (SendMoneyModal) is responsible for its own loading / error UI.
+   * Errors are re-thrown so the modal can display them contextually without
+   * also polluting the global walletError banner.
+   */
+  const submitTransfer = useCallback(
+    async (request: WalletTransferRequest): Promise<WalletTransferResponse> => {
+      try {
+        const response = await WalletService.transferFunds(request);
+        // Optimistically update balance from the API response
+        dispatch({ type: 'SET_BALANCE', payload: response.new_balance });
+        // Refresh the transaction list in the background
+        await fetchTransactions(5);
+        return response;
+      } catch (err) {
+        // Re-throw without touching global error state — the modal owns this error
+        throw err;
+      }
+    },
+    [fetchTransactions]
+  );
+
+  // ── Debit wallet ───────────────────────────────────────────────────────────
+
+  const debitWallet = useCallback(
+    async (request: WalletTransferRequest): Promise<WalletTransferResponse> => {
+      try {
+        const response = await WalletService.transferFunds(request);
+        // Optimistically update balance from the API response
+        dispatch({ type: 'SET_BALANCE', payload: response.new_balance });
+        // Refresh the transaction list in the background
+        await fetchTransactions(5);
+        return response;
+      } catch (err) {
+        throw err;
+      }
+    },
+    [fetchTransactions]
+  );
 
   // ── Misc ───────────────────────────────────────────────────────────────────
 
@@ -295,10 +348,12 @@ export function WalletProvider({ children }: WalletProviderProps) {
       fetchTransactions,
       fetchTransactionByReference,
       refreshWallet,
+      initiateFunding,
       setFundingAmount,
       setFundingGateway,
       submitFunding,
-      initiateFunding,
+      submitTransfer,
+      debitWallet,
       clearError,
     }),
     [
@@ -308,10 +363,12 @@ export function WalletProvider({ children }: WalletProviderProps) {
       fetchTransactions,
       fetchTransactionByReference,
       refreshWallet,
+      initiateFunding,
       setFundingAmount,
       setFundingGateway,
       submitFunding,
-      initiateFunding,
+      submitTransfer,
+      debitWallet,
       clearError,
     ]
   );
@@ -323,7 +380,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
   );
 }
 
-// ─── Hook ──────────────────────────────────────────────────────────────────────
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useWallet(): WalletContextType {
   const context = useContext(WalletContext);

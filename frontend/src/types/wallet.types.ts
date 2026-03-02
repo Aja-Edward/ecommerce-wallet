@@ -133,6 +133,8 @@ export interface WalletState {
 export interface WalletContextType extends WalletState {
   // Data fetching
   fetchWallet: () => Promise<void>;
+  // submitTransfer: ()=> Promise<void>;
+   submitTransfer: (request: WalletTransferRequest) => Promise<WalletTransferResponse>;
   fetchBalance: () => Promise<void>;
   fetchTransactions: (limit?: number) => Promise<void>;
   fetchTransactionByReference: (reference: string) => Promise<void>;
@@ -159,7 +161,28 @@ export interface TransactionFilters {
   endDate?: string;
   limit?: number;
 }
+export interface WalletTransferRequest {
+  recipient_username: string;
+  amount: number;
+  note?: string;
+}
 
+// WalletTransferResponse - returned from POST /wallet/transfer/
+export interface WalletTransferResponse {
+  success: boolean;
+  reference: string;
+  recipient_name: string;  // display name resolved by backend
+  amount: number;
+  new_balance: string;     // sender's updated balance
+  message: string;
+}
+
+// WalletUserLookupResponse - returned from GET /wallet/lookup-user/?username=
+export interface WalletUserLookupResponse {
+  id: number;
+  username: string;
+  email: string;
+}
 // ─── Parsed Transaction (UI layer) ───────────────────────────────────────────
 
 export interface ParsedTransaction extends WalletTransaction {

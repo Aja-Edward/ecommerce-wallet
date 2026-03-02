@@ -1,4 +1,6 @@
 from django.urls import path
+
+
 from .views import (
     WalletDetailView,
     WalletBalanceView,
@@ -7,6 +9,7 @@ from .views import (
     InitiateFundingView,
     DebitWalletView,
     VerifyWalletFundingView,
+    WalletUserLookupView,
 )
 
 urlpatterns = [
@@ -26,5 +29,7 @@ urlpatterns = [
         "verify/<str:reference>/",
         VerifyWalletFundingView.as_view(),
         name="verify-funding",
-    ),  # Add this
+    ),
+    # Add this
+    path("lookup-user/", WalletUserLookupView.as_view(), name="wallet-user-lookup"),
 ]
