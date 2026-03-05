@@ -1,31 +1,21 @@
 /**
- * Wallet Types
- * Types for wallet balance, transactions, and operations
+ * Wallet Type Definitions
  */
 
-// ─── Transaction Enums ────────────────────────────────────────────────────────
+// ─── Core Types ────────────────────────────────────────────────────────────────
 
-export type TransactionType   = 'CREDIT' | 'DEBIT';
-export type TransactionStatus = 'PENDING' | 'COMPLETED' | 'FAILED' | 'REVERSED';
-export type TransactionSource =
-  | 'FUNDING'
-  | 'ORDER_PAYMENT'
-  | 'REFUND'
-  | 'REVERSAL'
-  | 'ADMIN_ADJUSTMENT';
-
-/** Supported payment gateways */
 export type PaymentGateway = 'paystack' | 'flutterwave';
-
-// ─── Core Models ──────────────────────────────────────────────────────────────
+export type TransactionType = 'CREDIT' | 'DEBIT';
+export type TransactionStatus = 'PENDING' | 'COMPLETED' | 'FAILED' | 'REVERSED';
+export type TransactionSource = 'FUNDING' | 'ORDER_PAYMENT' | 'REFUND' | 'REVERSAL' | 'ADMIN_ADJUSTMENT';
 
 export interface Wallet {
   user: number;
   email: string;
   username: string;
-  balance: string;        // Decimal as string to maintain precision
-  created_at: string;     // ISO 8601
-  updated_at: string;     // ISO 8601
+  balance: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface WalletTransaction {
@@ -33,7 +23,7 @@ export interface WalletTransaction {
   wallet: number;
   user_email: string;
   transaction_type: TransactionType;
-  amount: string;         // Decimal as string
+  amount: string;
   balance_before: string;
   balance_after: string;
   status: TransactionStatus;
@@ -41,36 +31,30 @@ export interface WalletTransaction {
   reference: string;
   description: string | null;
   metadata: Record<string, unknown>;
-  created_at: string;     // ISO 8601
-  updated_at: string;     // ISO 8601
+  created_at: string;
+  updated_at: string;
 }
 
-// ─── API Request / Response Shapes ───────────────────────────────────────────
-
-export interface TransactionListResponse {
-  count: number;
-  transactions: WalletTransaction[];
+export interface SavedContact {
+  username: string;
+  display_name: string;
+  initials: string;
+  color: string;
+  added_at: string;
 }
+
+// ─── API Response Types ────────────────────────────────────────────────────────
 
 export interface WalletBalanceResponse {
   balance: string;
   currency: string;
 }
 
-/**
- * Matches the body your backend /api/payment/initiate/ expects.
- * Uses `gateway` and `transaction_type` to match the actual API.
- */
-export interface WalletFundingRequest {
-  amount: number;
-  payment_method: PaymentGateway;
-  transaction_type: 'WALLET_FUNDING';
+export interface TransactionListResponse {
+  count: number;
+  transactions: WalletTransaction[];
 }
 
-/**
- * Matches the actual 201 response from /api/payment/initiate/
- * { "message": "...", "payment": { "payment_url": "...", ... } }
- */
 export interface PaymentDetail {
   id: string;
   payment_method: string;
@@ -92,10 +76,44 @@ export interface PaymentDetail {
 export interface WalletFundingResponse {
   message: string;
   transaction_reference: string;
-  payment_url: string;             // ← flat, not nested under "payment"
+  payment_url: string;
   amount: string;
   payment_method: string;
   status: string;
+}
+
+export interface WalletTransferResponse {
+  success: boolean;
+  reference: string;
+  recipient_name: string;
+  amount: number;
+  new_balance: string;
+  message: string;
+}
+
+export interface WalletDebitResponse {
+  message: string;
+  transaction: WalletTransaction;
+}
+
+export interface WalletUserLookupResponse {
+  id: number;
+  username: string;
+  email: string;
+}
+
+// ─── API Request Types ─────────────────────────────────────────────────────────
+
+export interface WalletFundingRequest {
+  amount: number;
+  payment_method: PaymentGateway;
+  transaction_type: 'WALLET_FUNDING';
+}
+
+export interface WalletTransferRequest {
+  recipient_username: string;
+  amount: number;
+  description?: string;
 }
 
 export interface WalletDebitRequest {
@@ -104,20 +122,13 @@ export interface WalletDebitRequest {
   metadata?: Record<string, unknown>;
 }
 
-export interface WalletDebitResponse {
-  message: string;
-  transaction: WalletTransaction;
-}
-
-// ─── Funding Form ─────────────────────────────────────────────────────────────
+// ─── State Types ───────────────────────────────────────────────────────────────
 
 export interface FundingForm {
   amount: string;
   gateway: PaymentGateway;
   isLoading: boolean;
 }
-
-// ─── Context State ────────────────────────────────────────────────────────────
 
 export interface WalletState {
   wallet: Wallet | null;
@@ -128,26 +139,35 @@ export interface WalletState {
   isLoading: boolean;
   error: string | null;
   fundingForm: FundingForm;
+  contacts: SavedContact[];
 }
+
+// ─── Context Type ──────────────────────────────────────────────────────────────
 
 export interface WalletContextType extends WalletState {
   // Data fetching
   fetchWallet: () => Promise<void>;
-  // submitTransfer: ()=> Promise<void>;
-   submitTransfer: (request: WalletTransferRequest) => Promise<WalletTransferResponse>;
   fetchBalance: () => Promise<void>;
   fetchTransactions: (limit?: number) => Promise<void>;
   fetchTransactionByReference: (reference: string) => Promise<void>;
   refreshWallet: () => Promise<void>;
 
-  // Funding form — managed entirely in context, no local state needed in components
+  // Funding
+  initiateFunding: (request: WalletFundingRequest) => Promise<WalletFundingResponse>;
   setFundingAmount: (amount: string) => void;
   setFundingGateway: (gateway: PaymentGateway) => void;
   submitFunding: () => Promise<void>;
 
-  // Programmatic funding (for use outside the standard form flow)
-  initiateFunding: (request: WalletFundingRequest) => Promise<WalletFundingResponse>;
+  // Transfer
+  submitTransfer: (request: WalletTransferRequest) => Promise<WalletTransferResponse>;
+  lookupUser: (username: string) => Promise<WalletUserLookupResponse>;
 
+  // Contact management
+  loadContacts: () => void;
+  addContact: (contact: Omit<SavedContact, 'added_at'>) => void;
+  removeContact: (username: string) => void;
+
+  // Error handling
   clearError: () => void;
 }
 
@@ -161,28 +181,7 @@ export interface TransactionFilters {
   endDate?: string;
   limit?: number;
 }
-export interface WalletTransferRequest {
-  recipient_username: string;
-  amount: number;
-  note?: string;
-}
 
-// WalletTransferResponse - returned from POST /wallet/transfer/
-export interface WalletTransferResponse {
-  success: boolean;
-  reference: string;
-  recipient_name: string;  // display name resolved by backend
-  amount: number;
-  new_balance: string;     // sender's updated balance
-  message: string;
-}
-
-// WalletUserLookupResponse - returned from GET /wallet/lookup-user/?username=
-export interface WalletUserLookupResponse {
-  id: number;
-  username: string;
-  email: string;
-}
 // ─── Parsed Transaction (UI layer) ───────────────────────────────────────────
 
 export interface ParsedTransaction extends WalletTransaction {
