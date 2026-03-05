@@ -9,6 +9,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { formatCurrency } from '../../types/utils';
+import { useWallet } from '../../context/WalletContext';
 import type { WalletTransferRequest, WalletTransferResponse, WalletUserLookupResponse } from '../../types/wallet.types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -19,7 +20,7 @@ interface SendMoneyModalProps {
   onClose: () => void;
   /** Raw balance string from context e.g. "5000.00" */
   currentBalance: string;
-  submitTransfer: (request: WalletTransferRequest) => Promise<WalletTransferResponse>;
+  // submitTransfer: (request: WalletTransferRequest) => Promise<WalletTransferResponse>;
   onTransferSuccess: () => void;
 }
 
@@ -34,9 +35,11 @@ const SendMoneyModal = ({
   isOpen,
   onClose,
   currentBalance,
-  submitTransfer,
+  // submitTransfer,
   onTransferSuccess,
 }: SendMoneyModalProps) => {
+  const { submitTransfer } = useWallet();
+
   const [step, setStep]                           = useState<Step>('form');
   const [recipientUsername, setRecipientUsername] = useState('');
   const [amount, setAmount]                       = useState('');

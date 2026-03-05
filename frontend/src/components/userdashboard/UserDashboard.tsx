@@ -827,7 +827,7 @@ const Dashboard = () => {
         isOpen={sendModalOpen}
         onClose={() => setSendModalOpen(false)}
         currentBalance={balance}
-        submitTransfer={submitTransfer}
+        // submitTransfer={submitTransfer}
         onTransferSuccess={() => {
           fetchWallet();
           fetchTransactions(5);
