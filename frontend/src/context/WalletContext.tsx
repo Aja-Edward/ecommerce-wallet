@@ -25,7 +25,9 @@ import type {
   WalletFundingResponse,
   WalletTransferRequest,
   WalletTransferResponse,
+  WalletUserLookupResponse,
   PaymentGateway,
+  SavedContact,
 } from '../types/wallet.types';
 
 import WalletService from '../services/wallet';
@@ -42,7 +44,10 @@ type WalletAction =
   | { type: 'CLEAR_ERROR' }
   | { type: 'SET_FUNDING_FORM'; payload: Partial<{ amount: string; gateway: PaymentGateway }> }
   | { type: 'SET_FUNDING_LOADING'; payload: boolean }
-  | { type: 'RESET_FUNDING_FORM' };
+  | { type: 'RESET_FUNDING_FORM' }
+  | { type: 'SET_CONTACTS'; payload: SavedContact[] }
+  | { type: 'ADD_CONTACT'; payload: SavedContact }
+  | { type: 'REMOVE_CONTACT'; payload: string };
 
 // ─── Initial State ────────────────────────────────────────────────────────────
 
@@ -59,6 +64,7 @@ const initialState: WalletState = {
     gateway: 'paystack',
     isLoading: false,
   },
+  contacts: [],
 };
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
@@ -127,10 +133,32 @@ function walletReducer(state: WalletState, action: WalletAction): WalletState {
         fundingForm: { amount: '', gateway: 'paystack', isLoading: false },
       };
 
+    case 'SET_CONTACTS':
+      return {
+        ...state,
+        contacts: action.payload,
+      };
+
+    case 'ADD_CONTACT':
+      return {
+        ...state,
+        contacts: [...state.contacts, action.payload],
+      };
+
+    case 'REMOVE_CONTACT':
+      return {
+        ...state,
+        contacts: state.contacts.filter(c => c.username !== action.payload),
+      };
+
     default:
       return state;
   }
 }
+
+// ─── Local Storage Keys ───────────────────────────────────────────────────────
+
+const STORAGE_KEY = 'wallet_contacts';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -286,6 +314,23 @@ export function WalletProvider({ children }: WalletProviderProps) {
     }
   }, [handleError, fetchTransactions]);
 
+  // ── User lookup ────────────────────────────────────────────────────────────
+
+  /**
+   * Look up a user by username to verify they exist and have an active wallet
+   * before initiating a transfer. Returns display_name for confirmation UI.
+   */
+  const lookupUser = useCallback(
+    async (username: string): Promise<WalletUserLookupResponse> => {
+      try {
+        return await WalletService.lookupUser(username);
+      } catch (err) {
+        throw err;
+      }
+    },
+    []
+  );
+
   // ── Wallet-to-wallet transfer ──────────────────────────────────────────────
 
   /**
@@ -314,23 +359,68 @@ export function WalletProvider({ children }: WalletProviderProps) {
     [fetchTransactions]
   );
 
-  // ── Debit wallet ───────────────────────────────────────────────────────────
+  // ── Contact management ─────────────────────────────────────────────────────
 
-  const debitWallet = useCallback(
-    async (request: WalletTransferRequest): Promise<WalletTransferResponse> => {
-      try {
-        const response = await WalletService.transferFunds(request);
-        // Optimistically update balance from the API response
-        dispatch({ type: 'SET_BALANCE', payload: response.new_balance });
-        // Refresh the transaction list in the background
-        await fetchTransactions(5);
-        return response;
-      } catch (err) {
-        throw err;
+  /**
+   * Load saved contacts from localStorage on mount
+   */
+  const loadContacts = useCallback(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const contacts = JSON.parse(stored) as SavedContact[];
+        dispatch({ type: 'SET_CONTACTS', payload: contacts });
       }
-    },
-    [fetchTransactions]
-  );
+    } catch (err) {
+      console.error('Failed to load contacts:', err);
+    }
+  }, []);
+
+  /**
+   * Add a new contact and persist to localStorage
+   */
+  const addContact = useCallback((contact: Omit<SavedContact, 'added_at'>) => {
+    const newContact: SavedContact = {
+      ...contact,
+      added_at: new Date().toISOString(),
+    };
+
+    dispatch({ type: 'ADD_CONTACT', payload: newContact });
+
+    // Persist to localStorage
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      const existing = stored ? JSON.parse(stored) : [];
+      const updated = [...existing, newContact];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    } catch (err) {
+      console.error('Failed to save contact:', err);
+    }
+  }, []);
+
+  /**
+   * Remove a contact by username and persist to localStorage
+   */
+  const removeContact = useCallback((username: string) => {
+    dispatch({ type: 'REMOVE_CONTACT', payload: username });
+
+    // Persist to localStorage
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const existing = JSON.parse(stored) as SavedContact[];
+        const updated = existing.filter(c => c.username !== username);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      }
+    } catch (err) {
+      console.error('Failed to remove contact:', err);
+    }
+  }, []);
+
+  // Load contacts on mount
+  useEffect(() => {
+    loadContacts();
+  }, [loadContacts]);
 
   // ── Misc ───────────────────────────────────────────────────────────────────
 
@@ -352,8 +442,11 @@ export function WalletProvider({ children }: WalletProviderProps) {
       setFundingAmount,
       setFundingGateway,
       submitFunding,
+      lookupUser,
       submitTransfer,
-      debitWallet,
+      loadContacts,
+      addContact,
+      removeContact,
       clearError,
     }),
     [
@@ -367,8 +460,11 @@ export function WalletProvider({ children }: WalletProviderProps) {
       setFundingAmount,
       setFundingGateway,
       submitFunding,
+      lookupUser,
       submitTransfer,
-      debitWallet,
+      loadContacts,
+      addContact,
+      removeContact,
       clearError,
     ]
   );

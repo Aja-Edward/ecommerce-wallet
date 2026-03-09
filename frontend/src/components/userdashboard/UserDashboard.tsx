@@ -4,7 +4,8 @@ import { useWallet } from '../../context/WalletContext';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { formatCurrency, formatDate, formatRelativeTime, parseTransaction } from '../../types/utils';
 import SendMoneyModal from './Sendmoneymodal';
-import type { WalletTransferRequest, WalletTransferResponse } from '../../types/wallet.types';
+import AddContactModal from './Addcontactmodal';
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const CHART_DATA = [
@@ -30,8 +31,6 @@ const TAB_ICONS: Record<string, string> = {
   cards: '💳', invoices: '📝', analytics: '📈', settings: '⚙️',
 };
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api';
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const Dashboard = () => {
@@ -51,10 +50,14 @@ const Dashboard = () => {
     setFundingGateway,
     submitFunding,
     submitTransfer,
+    contacts,
   } = useWallet();
 
-  const [activeTab, setActiveTab]       = useState('overview');
+  const [activeTab, setActiveTab] = useState('overview');
   const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [addContactModalOpen, setAddContactModalOpen] = useState(false);
+  const [selectedRecipient, setSelectedRecipient] = useState<string | undefined>();
+  
   const navigate = useNavigate();
 
   // ── Derived data ────────────────────────────────────────────────────────────
@@ -92,9 +95,9 @@ const Dashboard = () => {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    const params    = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(window.location.search);
     const reference = params.get('payment_reference') ?? params.get('reference');
-    const status    = params.get('status');
+    const status = params.get('status');
 
     if (!reference || status !== 'completed') return;
 
@@ -108,8 +111,10 @@ const Dashboard = () => {
 
       if (!token) return;
 
+      const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api';
+
       try {
-        const res  = await fetch(`${API_BASE}/wallet/verify/${ref}/`, {
+        const res = await fetch(`${API_BASE}/wallet/verify/${ref}/`, {
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         });
         const data = await res.json();
@@ -137,7 +142,6 @@ const Dashboard = () => {
     );
   }
 
-  // Use <Navigate> instead of calling navigate() during render
   if (!isAuthenticated) {
     return <Navigate to="/signin" replace />;
   }
@@ -149,11 +153,26 @@ const Dashboard = () => {
     navigate('/signin');
   };
 
-  const initials        = user?.username ? user.username.slice(0, 2).toUpperCase() : '??';
+  const handleContactClick = (username: string) => {
+    setSelectedRecipient(username);
+    setSendModalOpen(true);
+  };
+
+  const handleSendClick = () => {
+    setSelectedRecipient(undefined);
+    setSendModalOpen(true);
+  };
+
+  const handleTransferSuccess = () => {
+    fetchWallet();
+    fetchTransactions(5);
+  };
+
+  const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : '??';
   const formattedBalance = walletLoading && !wallet ? '...' : formatCurrency(balance, 'NGN');
 
   const creditCount = parsedTransactions.filter(t => t.isCredit).length;
-  const debitCount  = parsedTransactions.filter(t => t.isDebit).length;
+  const debitCount = parsedTransactions.filter(t => t.isDebit).length;
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -381,28 +400,31 @@ const Dashboard = () => {
                 <div className="bg-[#0f1629] border border-gray-800/50 rounded-2xl p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-white">Quick Transfer</h3>
-                    <button className="text-sm text-emerald-400 hover:text-emerald-300">View All</button>
+                    <button
+                      onClick={() => setAddContactModalOpen(true)}
+                      className="text-sm text-emerald-400 hover:text-emerald-300"
+                    >
+                      Manage Contacts
+                    </button>
                   </div>
 
                   <div className="flex items-center gap-4 mb-4">
-                    {[
-                      { name: 'Sarah', initials: 'SM', color: 'from-pink-500 to-rose-500' },
-                      { name: 'John',  initials: 'JD', color: 'from-blue-500 to-cyan-500' },
-                      { name: 'Emma',  initials: 'EW', color: 'from-purple-500 to-pink-500' },
-                      { name: 'Mike',  initials: 'MJ', color: 'from-orange-500 to-red-500' },
-                    ].map((contact) => (
+                    {contacts.slice(0, 4).map((contact) => (
                       <button
-                        key={contact.name}
-                        onClick={() => setSendModalOpen(true)}
+                        key={contact.username}
+                        onClick={() => handleContactClick(contact.username)}
                         className="flex flex-col items-center gap-2 group"
                       >
                         <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${contact.color} flex items-center justify-center text-white font-semibold ring-2 ring-transparent group-hover:ring-emerald-500 transition-all`}>
                           {contact.initials}
                         </div>
-                        <span className="text-xs text-gray-400">{contact.name}</span>
+                        <span className="text-xs text-gray-400">{contact.display_name.split(' ')[0]}</span>
                       </button>
                     ))}
-                    <button className="w-14 h-14 rounded-full bg-gray-800/50 hover:bg-gray-800 flex items-center justify-center text-2xl text-gray-400 transition-colors">
+                    <button
+                      onClick={() => setAddContactModalOpen(true)}
+                      className="w-14 h-14 rounded-full bg-gray-800/50 hover:bg-gray-800 flex items-center justify-center text-2xl text-gray-400 transition-colors"
+                    >
                       +
                     </button>
                   </div>
@@ -412,11 +434,11 @@ const Dashboard = () => {
                       type="text"
                       placeholder="Enter username or amount"
                       className="flex-1 px-4 py-3 bg-gray-800/50 border border-gray-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500/50"
-                      onFocus={() => setSendModalOpen(true)}
+                      onFocus={handleSendClick}
                       readOnly
                     />
                     <button
-                      onClick={() => setSendModalOpen(true)}
+                      onClick={handleSendClick}
                       className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-medium transition-colors"
                     >
                       Send
@@ -443,9 +465,9 @@ const Dashboard = () => {
                     <div className="relative w-40 h-40">
                       <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                         <circle cx="50" cy="50" r="35" fill="none" stroke="#1f2937" strokeWidth="12" />
-                        <circle cx="50" cy="50" r="35" fill="none" stroke="#f97316" strokeWidth="12" strokeDasharray="77 220" strokeDashoffset="0"    className="transition-all duration-1000" />
-                        <circle cx="50" cy="50" r="35" fill="none" stroke="#3b82f6" strokeWidth="12" strokeDasharray="88 220" strokeDashoffset="-77"   className="transition-all duration-1000" />
-                        <circle cx="50" cy="50" r="35" fill="none" stroke="#10b981" strokeWidth="12" strokeDasharray="55 220" strokeDashoffset="-165"  className="transition-all duration-1000" />
+                        <circle cx="50" cy="50" r="35" fill="none" stroke="#f97316" strokeWidth="12" strokeDasharray="77 220" strokeDashoffset="0" className="transition-all duration-1000" />
+                        <circle cx="50" cy="50" r="35" fill="none" stroke="#3b82f6" strokeWidth="12" strokeDasharray="88 220" strokeDashoffset="-77" className="transition-all duration-1000" />
+                        <circle cx="50" cy="50" r="35" fill="none" stroke="#10b981" strokeWidth="12" strokeDasharray="55 220" strokeDashoffset="-165" className="transition-all duration-1000" />
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
                         <p className="text-2xl font-bold text-white">76%</p>
@@ -456,8 +478,8 @@ const Dashboard = () => {
                     <div className="grid grid-cols-3 gap-4 w-full mt-6">
                       {[
                         { color: 'bg-orange-500', label: 'Shopping', value: '35%' },
-                        { color: 'bg-blue-500',   label: 'Bills',    value: '40%' },
-                        { color: 'bg-emerald-500', label: 'Food',    value: '25%' },
+                        { color: 'bg-blue-500', label: 'Bills', value: '40%' },
+                        { color: 'bg-emerald-500', label: 'Food', value: '25%' },
                       ].map(item => (
                         <div key={item.label} className="flex items-center gap-2">
                           <div className={`w-3 h-3 rounded-full ${item.color}`} />
@@ -625,7 +647,7 @@ const Dashboard = () => {
                             <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
                               txn.isCompleted ? 'bg-emerald-500/10 text-emerald-400'
                               : txn.isPending ? 'bg-orange-500/10 text-orange-400'
-                              : txn.isFailed  ? 'bg-red-500/10 text-red-400'
+                              : txn.isFailed ? 'bg-red-500/10 text-red-400'
                               : 'bg-gray-500/10 text-gray-400'
                             }`}>
                               {txn.status.toLowerCase()}
@@ -791,7 +813,7 @@ const Dashboard = () => {
                           <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
                             txn.isCompleted ? 'bg-emerald-500/10 text-emerald-400'
                             : txn.isPending ? 'bg-orange-500/10 text-orange-400'
-                            : txn.isFailed  ? 'bg-red-500/10 text-red-400'
+                            : txn.isFailed ? 'bg-red-500/10 text-red-400'
                             : 'bg-gray-500/10 text-gray-400'
                           }`}>
                             {txn.status.toLowerCase()}
@@ -824,14 +846,21 @@ const Dashboard = () => {
 
       {/* ── Send Money Modal ─────────────────────────────────────────────────── */}
       <SendMoneyModal
-        isOpen={sendModalOpen}
-        onClose={() => setSendModalOpen(false)}
-        currentBalance={balance}
-        // submitTransfer={submitTransfer}
-        onTransferSuccess={() => {
-          fetchWallet();
-          fetchTransactions(5);
+        isOpen={sendModalOpen} 
+        onClose={() => {
+          setSendModalOpen(false);
+          setSelectedRecipient(undefined);
         }}
+        currentBalance={balance}
+        submitTransfer={submitTransfer}
+        onTransferSuccess={handleTransferSuccess}
+        prefilledRecipient={selectedRecipient}
+      />
+
+      {/* ── Add Contact Modal ────────────────────────────────────────────────── */}
+      <AddContactModal
+        isOpen={addContactModalOpen}
+        onClose={() => setAddContactModalOpen(false)}
       />
     </div>
   );

@@ -1,5 +1,8 @@
-from django.urls import path
+"""
+Wallet URLs - UPDATED with transfer endpoint
+"""
 
+from django.urls import path
 
 from .views import (
     WalletDetailView,
@@ -10,6 +13,7 @@ from .views import (
     DebitWalletView,
     VerifyWalletFundingView,
     WalletUserLookupView,
+    WalletTransferView,  # ← ADD THIS IMPORT
 )
 
 urlpatterns = [
@@ -30,6 +34,7 @@ urlpatterns = [
         VerifyWalletFundingView.as_view(),
         name="verify-funding",
     ),
-    # Add this
     path("lookup-user/", WalletUserLookupView.as_view(), name="wallet-user-lookup"),
+    # ← ADD THIS LINE
+    path("transfer/", WalletTransferView.as_view(), name="wallet-transfer"),
 ]

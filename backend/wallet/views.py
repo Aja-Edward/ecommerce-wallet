@@ -303,6 +303,202 @@ class WalletBalanceView(APIView):
             )
 
 
+class WalletTransferView(APIView):
+    """
+    POST: Transfer funds from authenticated user's wallet to another user
+    """
+
+    authentication_classes = [SupabaseJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """Transfer funds to another user's wallet"""
+        logger.info("=" * 80)
+        logger.info("💸 WALLET TRANSFER REQUEST")
+        logger.info(f"From: {request.user.email}")
+        logger.info(f"Data: {request.data}")
+        logger.info("=" * 80)
+
+        recipient_username = request.data.get("recipient_username")
+        amount = request.data.get("amount")
+        note = request.data.get("note", "")
+
+        # ── Validation ──────────────────────────────────────────────────────
+        if not recipient_username:
+            return Response(
+                {"error": "Recipient username is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            from decimal import Decimal
+
+            amount = Decimal(str(amount))
+            if amount <= 0:
+                return Response(
+                    {"error": "Amount must be greater than 0"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if amount < Decimal("10.00"):
+                return Response(
+                    {"error": "Minimum transfer amount is ₦10"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except (ValueError, TypeError, Exception):
+            return Response(
+                {"error": "Invalid amount"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ── Get sender wallet ───────────────────────────────────────────────
+        try:
+            sender_wallet = Wallet.objects.get(user=request.user)
+            logger.info(f"✅ Sender wallet found for user: {request.user.email}")
+            logger.info(f"   Balance: ₦{sender_wallet.balance}")
+        except Wallet.DoesNotExist:
+            logger.error(f"❌ Sender wallet not found for user: {request.user.email}")
+            return Response(
+                {"error": "Wallet not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        # ── Check balance ───────────────────────────────────────────────────
+        from decimal import Decimal
+
+        if Decimal(sender_wallet.balance) < amount:
+            logger.error(f"❌ Insufficient balance: {sender_wallet.balance} < {amount}")
+            return Response(
+                {"error": "Insufficient balance"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ── Get recipient (CASE-INSENSITIVE) ────────────────────────────────
+        try:
+            recipient = User.objects.filter(
+                Q(username__iexact=recipient_username)
+                | Q(email__iexact=recipient_username)
+            ).first()
+
+            if not recipient:
+                raise User.DoesNotExist
+
+            logger.info(f"✅ Recipient found: {recipient.username} ({recipient.email})")
+        except User.DoesNotExist:
+            logger.error(f"❌ Recipient not found: '{recipient_username}'")
+            return Response(
+                {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        # ── Prevent self-transfer ───────────────────────────────────────────
+        if recipient.id == request.user.id:
+            logger.error("❌ Self-transfer attempt")
+            return Response(
+                {"error": "Cannot transfer to yourself"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ── Get recipient wallet ────────────────────────────────────────────
+        try:
+            recipient_wallet = Wallet.objects.get(user=recipient)
+            logger.info(f"✅ Recipient wallet found for user: {recipient.email}")
+            logger.info(f"   Balance: ₦{recipient_wallet.balance}")
+        except Wallet.DoesNotExist:
+            logger.error(f"❌ Recipient wallet not found for {recipient.username}")
+            return Response(
+                {"error": "User does not have an active wallet"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # ── Atomic transaction ──────────────────────────────────────────────
+        try:
+            from django.db import transaction as db_transaction
+            import uuid
+
+            with db_transaction.atomic():
+                # Generate two unique references — one per transaction record
+                sender_reference = f"TXF-SENT-{uuid.uuid4().hex[:12].upper()}"
+                recipient_reference = f"TXF-RECV-{uuid.uuid4().hex[:12].upper()}"
+                logger.info(f"📝 Sender reference: {sender_reference}")
+                logger.info(f"📝 Recipient reference: {recipient_reference}")
+
+                # Debit sender
+                old_sender_balance = Decimal(sender_wallet.balance)
+                sender_wallet.balance = old_sender_balance - amount
+                sender_wallet.save()
+                logger.info(
+                    f"💰 Sender debited: ₦{old_sender_balance} → ₦{sender_wallet.balance}"
+                )
+
+                # Create sender transaction (debit)
+                sender_txn = WalletTransaction.objects.create(
+                    wallet=sender_wallet,
+                    transaction_type="DEBIT",
+                    amount=amount,
+                    balance_before=old_sender_balance,
+                    balance_after=sender_wallet.balance,
+                    status="COMPLETED",
+                    source="WALLET_TRANSFER",
+                    reference=sender_reference,
+                    description=note or f"Transfer to @{recipient.username}",
+                    metadata={
+                        "recipient_username": recipient.username,
+                        "recipient_email": recipient.email,
+                        "transfer_type": "SENT",
+                        "paired_reference": recipient_reference,
+                    },
+                )
+                logger.info(f"📝 Sender transaction created: ID {sender_txn.id}")
+
+                # Credit recipient
+                old_recipient_balance = Decimal(recipient_wallet.balance)
+                recipient_wallet.balance = old_recipient_balance + amount
+                recipient_wallet.save()
+                logger.info(
+                    f"💰 Recipient credited: ₦{old_recipient_balance} → ₦{recipient_wallet.balance}"
+                )
+
+                # Create recipient transaction (credit)
+                recipient_txn = WalletTransaction.objects.create(
+                    wallet=recipient_wallet,
+                    transaction_type="CREDIT",
+                    amount=amount,
+                    balance_before=old_recipient_balance,
+                    balance_after=recipient_wallet.balance,
+                    status="COMPLETED",
+                    source="WALLET_TRANSFER",
+                    reference=recipient_reference,
+                    description=note or f"Transfer from @{request.user.username}",
+                    metadata={
+                        "sender_username": request.user.username,
+                        "sender_email": request.user.email,
+                        "transfer_type": "RECEIVED",
+                        "paired_reference": sender_reference,
+                    },
+                )
+                logger.info(f"📝 Recipient transaction created: ID {recipient_txn.id}")
+
+                logger.info("✅ Transfer completed successfully!")
+                logger.info("=" * 80)
+
+                return Response(
+                    {
+                        "success": True,
+                        "reference": sender_reference,
+                        "recipient_name": recipient.email,
+                        "amount": float(amount),
+                        "new_balance": str(sender_wallet.balance),
+                        "message": f"Successfully transferred ₦{amount} to @{recipient.username}",
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+        except Exception as e:
+            logger.exception("💥 EXCEPTION during transfer:")
+            logger.error(f"   Error: {str(e)}")
+            logger.error("=" * 80)
+            return Response(
+                {"error": f"Transfer failed: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
 class DebitWalletView(APIView):
     """
     POST: Debit wallet (Internal use - for orders/checkout)

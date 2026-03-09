@@ -56,11 +56,12 @@ class WalletTransaction(models.Model):
     )
 
     TRANSACTION_SOURCES = (
-        ('FUNDING', 'Wallet Funding'),
-        ('ORDER_PAYMENT', 'Order Payment'),
-        ('REFUND', 'Refund'),
-        ('REVERSAL', 'Reversal'),
-        ('ADMIN_ADJUSTMENT', 'Admin Adjustment'),
+        ("FUNDING", "Wallet Funding"),
+        ("ORDER_PAYMENT", "Order Payment"),
+        ("REFUND", "Refund"),
+        ("REVERSAL", "Reversal"),
+        ("ADMIN_ADJUSTMENT", "Admin Adjustment"),
+        ("TRANSFER", "Wallet Transfer"),
     )
 
     id = models.AutoField(primary_key=True)
