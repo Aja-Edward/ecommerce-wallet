@@ -1,3 +1,4 @@
+// router/index.tsx
 import { Suspense, lazy } from 'react'
 import { createBrowserRouter, Outlet } from 'react-router-dom';
 import { WalletProvider } from '../context/WalletContext';
@@ -6,21 +7,28 @@ import RouteErrorElement from '../components/RouterErrorElement';
 import { Navbar } from '../components/home/Navbar';
 import Footer from '../components/home/Footer';
 
-const Home = lazy(() => import('../pages/Landing/Home'));
-const Dashboard = lazy(() => import('../pages/dashboard/Wallet'));
-const Privacy = lazy(() => import('../pages/Privacy/FirstPrivacypage'));
-const RegisterForm = lazy(() => import('../pages/Landing/Register'));
-const Login = lazy(() => import('../pages/Landing/Login'));
-const AboutUs = lazy(() => import('../pages/aboutus/AboutUS'));
+const Home            = lazy(() => import('../pages/Landing/Home'));
+const DashboardShell  = lazy(() => import('../pages/dashboard/DashboardShell'));
+const DashboardOverview = lazy(() => import('../pages/dashboard/Dashboard'));
+const TransactionsPage  = lazy(() => import('../pages/dashboard/TransactionsPage'));
+const WalletPage        = lazy(() => import('../pages/dashboard/WalletPage'));
+const CardsPage         = lazy(() => import('../pages/dashboard/CardsPage'));
+const InvoicesPage      = lazy(() => import('../pages/dashboard/InvoicesPage'));
+const AnalyticsPage     = lazy(() => import('../pages/dashboard/Analyticspage'));
+const SettingsPage      = lazy(() => import('../pages/dashboard/SettingsPage'));
+const Privacy           = lazy(() => import('../pages/Privacy/FirstPrivacypage'));
+const RegisterForm      = lazy(() => import('../pages/Landing/Register'));
+const Login             = lazy(() => import('../pages/Landing/Login'));
+const AboutUs           = lazy(() => import('../pages/aboutus/AboutUS'));
 
-// Loading fallback component
+// Loading fallback
 const LoadingFallback = () => (
   <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center">
-    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-400"></div>
+    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-400" />
   </div>
 );
 
-// Public layout — has Navbar + Footer
+// Public layout — Navbar + Footer
 const MainLayout = () => (
   <>
     <Navbar />
@@ -31,17 +39,17 @@ const MainLayout = () => (
   </>
 );
 
-// Protected layout — no Navbar/Footer, has WalletProvider
+// Dashboard layout — WalletProvider wraps the shell + all child routes
 const DashboardLayout = () => (
   <WalletProvider>
     <Suspense fallback={<LoadingFallback />}>
-      <Outlet />
+      <Outlet />   {/* DashboardShell renders here */}
     </Suspense>
   </WalletProvider>
 );
 
 export const router = createBrowserRouter([
-  // ── Public routes (with Navbar + Footer) ──────────────────────────────────
+  // ── Public routes ──────────────────────────────────────────────────────────
   {
     path: '/',
     element: (
@@ -51,24 +59,33 @@ export const router = createBrowserRouter([
     ),
     errorElement: <RouteErrorElement />,
     children: [
-      { index: true, element: <Home />, errorElement: <RouteErrorElement /> },
-      { path: 'privacy', element: <Privacy />, errorElement: <RouteErrorElement /> },
-      { path: 'signup', element: <RegisterForm />, errorElement: <RouteErrorElement /> },
-      { path: 'signin', element: <Login />, errorElement: <RouteErrorElement /> },
+      { index: true,        element: <Home />,         errorElement: <RouteErrorElement /> },
+      { path: 'privacy',    element: <Privacy />,      errorElement: <RouteErrorElement /> },
+      { path: 'signup',     element: <RegisterForm />, errorElement: <RouteErrorElement /> },
+      { path: 'signin',     element: <Login />,        errorElement: <RouteErrorElement /> },
     ],
   },
 
-  // ── Protected routes (with WalletProvider, no Navbar/Footer) ─────────────
+  // ── Protected / dashboard routes ───────────────────────────────────────────
   {
     element: (
       <ErrorBoundary>
         <DashboardLayout />
       </ErrorBoundary>
     ),
-    errorElement: <RouteErrorElement />,
     children: [
-      { path: 'dashboard', element: <Dashboard />, errorElement: <RouteErrorElement /> },
-      // future protected pages go here (orders, profile, etc.)
+      {
+        element: <DashboardShell />,   // sidebar + header live here; <Outlet /> renders pages
+        children: [
+          { path: 'dashboard',                element: <DashboardOverview /> },
+          { path: 'dashboard/transactions',   element: <TransactionsPage /> },
+          { path: 'dashboard/wallets',        element: <WalletPage /> },
+          { path: 'dashboard/cards',          element: <CardsPage /> },
+          { path: 'dashboard/invoices',       element: <InvoicesPage /> },
+          { path: 'dashboard/analytics',      element: <AnalyticsPage /> },
+          { path: 'dashboard/settings',       element: <SettingsPage /> },
+        ],
+      },
     ],
   },
 ]);
