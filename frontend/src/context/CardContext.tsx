@@ -1,412 +1,242 @@
 /**
- * CardContext.tsx
- * Provides all card state and actions to the component tree.
- * CardsPage and any child component reads from here — never calls the service directly.
+ * Card Context
+ * Provides card state and operations to the component tree.
+ * Follows the same pattern as WalletContext.tsx
  */
-
-"use client";
 
 import React, {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useReducer,
-  useRef,
-} from "react";
-import CardService from "../services/card_services";
-import type 
-{
-  Card,
-  CardStats,
-  CardTransaction,
-  CreateCardPayload,
-  PaginatedResponse,
-  TransactionFilters,
-  UpdateCardPayload,
-} from "../types/cards_types";
+  useEffect,
+  useMemo,
+  type ReactNode,
+} from 'react';
 
-// ─── State shape ──────────────────────────────────────────────────────────────
+import CardService, {
+  type Card,
+  type CardStats,
+  type CardTransaction,
+} from '../services/card';
+
+// ─── State Type ───────────────────────────────────────────────────────────────
 
 interface CardState {
-  // Cards
   cards: Card[];
-  cardsLoading: boolean;
-  cardsError: string | null;
-
-  // Stats
   stats: CardStats | null;
-  statsLoading: boolean;
-
-  // Transactions
   transactions: CardTransaction[];
-  transactionsLoading: boolean;
-  transactionsError: string | null;
-  transactionsMeta: {
-    count: number;
-    next: string | null;
-    previous: string | null;
-  };
-
-  // Active filters (synced with the frontend dropdown + filter controls)
-  activeFilters: TransactionFilters;
-
-  // Per-card action loading state — keyed by card id
-  // e.g. { "uuid-123": "freezing" }
-  cardActionLoading: Record<string, CardAction | null>;
+  isLoading: boolean;
+  error: string | null;
 }
 
-type CardAction =
-  | "freezing"
-  | "unfreezing"
-  | "blocking"
-  | "setting-default"
-  | "updating"
-  | "creating";
+// ─── Context Type ─────────────────────────────────────────────────────────────
+
+interface CardContextType extends CardState {
+  fetchCards: () => Promise<void>;
+  fetchStats: () => Promise<void>;
+  fetchTransactions: () => Promise<void>;
+  addCard: (card: Omit<Card, 'id'>) => Promise<void>;
+  deleteCard: (id: string) => Promise<void>;
+  clearError: () => void;
+}
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
-type Action =
-  | { type: "SET_CARDS"; payload: Card[] }
-  | { type: "SET_CARDS_LOADING"; payload: boolean }
-  | { type: "SET_CARDS_ERROR"; payload: string | null }
-  | { type: "ADD_CARD"; payload: Card }
-  | { type: "UPDATE_CARD"; payload: Card }
-  | { type: "SET_STATS"; payload: CardStats }
-  | { type: "SET_STATS_LOADING"; payload: boolean }
-  | { type: "SET_TRANSACTIONS"; payload: PaginatedResponse<CardTransaction> }
-  | { type: "SET_TRANSACTIONS_LOADING"; payload: boolean }
-  | { type: "SET_TRANSACTIONS_ERROR"; payload: string | null }
-  | { type: "SET_ACTIVE_FILTERS"; payload: TransactionFilters }
-  | { type: "SET_CARD_ACTION_LOADING"; payload: { id: string; action: CardAction | null } };
+type CardAction =
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_ERROR'; payload: string | null }
+  | { type: 'SET_CARDS'; payload: Card[] }
+  | { type: 'ADD_CARD'; payload: Card }
+  | { type: 'REMOVE_CARD'; payload: string }
+  | { type: 'SET_STATS'; payload: CardStats }
+  | { type: 'SET_TRANSACTIONS'; payload: CardTransaction[] }
+  | { type: 'CLEAR_ERROR' };
 
-// ─── Reducer ──────────────────────────────────────────────────────────────────
+// ─── Initial State ────────────────────────────────────────────────────────────
 
 const initialState: CardState = {
   cards: [],
-  cardsLoading: false,
-  cardsError: null,
-
   stats: null,
-  statsLoading: false,
-
   transactions: [],
-  transactionsLoading: false,
-  transactionsError: null,
-  transactionsMeta: { count: 0, next: null, previous: null },
-
-  activeFilters: {},
-  cardActionLoading: {},
+  isLoading: false,
+  error: null,
 };
 
-function reducer(state: CardState, action: Action): CardState {
+// ─── Reducer ──────────────────────────────────────────────────────────────────
+
+function cardReducer(state: CardState, action: CardAction): CardState {
   switch (action.type) {
-    case "SET_CARDS":
-      return { ...state, cards: action.payload, cardsError: null };
+    case 'SET_LOADING':
+      return { ...state, isLoading: action.payload };
 
-    case "SET_CARDS_LOADING":
-      return { ...state, cardsLoading: action.payload };
+    case 'SET_ERROR':
+      return { ...state, error: action.payload, isLoading: false };
 
-    case "SET_CARDS_ERROR":
-      return { ...state, cardsError: action.payload };
+    case 'SET_CARDS':
+      return { ...state, cards: action.payload, isLoading: false, error: null };
 
-    case "ADD_CARD":
-      return { ...state, cards: [action.payload, ...state.cards] };
-
-    // Merge the updated card into the list in-place
-    case "UPDATE_CARD":
+    case 'ADD_CARD':
       return {
         ...state,
-        cards: state.cards.map((c) =>
-          c.id === action.payload.id ? action.payload : c
-        ),
+        cards: [...state.cards, action.payload],
+        isLoading: false,
+        error: null,
       };
 
-    case "SET_STATS":
-      return { ...state, stats: action.payload };
-
-    case "SET_STATS_LOADING":
-      return { ...state, statsLoading: action.payload };
-
-    case "SET_TRANSACTIONS":
+    case 'REMOVE_CARD':
       return {
         ...state,
-        transactions: action.payload.results,
-        transactionsMeta: {
-          count: action.payload.count,
-          next: action.payload.next,
-          previous: action.payload.previous,
-        },
-        transactionsError: null,
+        cards: state.cards.filter((c) => c.id !== action.payload),
+        isLoading: false,
+        error: null,
       };
 
-    case "SET_TRANSACTIONS_LOADING":
-      return { ...state, transactionsLoading: action.payload };
+    case 'SET_STATS':
+      return { ...state, stats: action.payload, isLoading: false, error: null };
 
-    case "SET_TRANSACTIONS_ERROR":
-      return { ...state, transactionsError: action.payload };
+    case 'SET_TRANSACTIONS':
+      return { ...state, transactions: action.payload, isLoading: false, error: null };
 
-    case "SET_ACTIVE_FILTERS":
-      return { ...state, activeFilters: action.payload };
-
-    case "SET_CARD_ACTION_LOADING":
-      return {
-        ...state,
-        cardActionLoading: {
-          ...state.cardActionLoading,
-          [action.payload.id]: action.payload.action,
-        },
-      };
+    case 'CLEAR_ERROR':
+      return { ...state, error: null };
 
     default:
       return state;
   }
 }
 
-// ─── Context shape ────────────────────────────────────────────────────────────
+// ─── Context ──────────────────────────────────────────────────────────────────
 
-interface CardContextValue extends CardState {
-  // Data fetching
-  fetchCards: () => Promise<void>;
-  fetchStats: () => Promise<void>;
-  fetchTransactions: (filters?: TransactionFilters) => Promise<void>;
-
-  // Card mutations
-  createCard: (payload: CreateCardPayload) => Promise<Card>;
-  updateCard: (id: string, payload: UpdateCardPayload) => Promise<Card>;
-  freezeCard: (id: string) => Promise<void>;
-  unfreezeCard: (id: string) => Promise<void>;
-  blockCard: (id: string) => Promise<void>;
-  setDefaultCard: (id: string) => Promise<void>;
-
-  // Filter helpers (used by the "All Cards" dropdown + any filter UI)
-  setFilters: (filters: TransactionFilters) => void;
-  clearFilters: () => void;
-
-  // Derived helpers
-  getCardById: (id: string) => Card | undefined;
-  defaultCard: Card | undefined;
-}
-
-// ─── Context creation ─────────────────────────────────────────────────────────
-
-const CardContext = createContext<CardContextValue | null>(null);
+const CardContext = createContext<CardContextType | null>(null);
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
-export function CardProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+export function CardProvider({ children }: { children: ReactNode }) {
+  const [state, dispatch] = useReducer(cardReducer, initialState);
 
-  // Prevent running effects after unmount
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => { mounted.current = false; };
+  // ── Error helper ───────────────────────────────────────────────────────────
+
+  const handleError = useCallback((err: unknown) => {
+    const message =
+      typeof err === 'object' && err !== null && 'error' in err
+        ? String((err as { error: unknown }).error)
+        : err instanceof Error
+        ? err.message
+        : 'An unexpected error occurred.';
+    dispatch({ type: 'SET_ERROR', payload: message });
   }, []);
 
   // ── Fetch cards ────────────────────────────────────────────────────────────
 
   const fetchCards = useCallback(async () => {
-    dispatch({ type: "SET_CARDS_LOADING", payload: true });
+    dispatch({ type: 'SET_LOADING', payload: true });
     try {
       const cards = await CardService.getCards();
-      if (mounted.current) {
-        dispatch({ type: "SET_CARDS", payload: cards });
-      }
-    } catch (err: any) {
-      if (mounted.current) {
-        dispatch({
-          type: "SET_CARDS_ERROR",
-          payload: err?.response?.data?.detail ?? "Failed to load cards.",
-        });
-      }
-    } finally {
-      if (mounted.current) {
-        dispatch({ type: "SET_CARDS_LOADING", payload: false });
-      }
+      dispatch({ type: 'SET_CARDS', payload: cards });
+    } catch (err) {
+      handleError(err);
     }
-  }, []);
+  }, [handleError]);
 
   // ── Fetch stats ────────────────────────────────────────────────────────────
 
   const fetchStats = useCallback(async () => {
-    dispatch({ type: "SET_STATS_LOADING", payload: true });
+    dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      const stats = await CardService.getCardStats();
-      if (mounted.current) {
-        dispatch({ type: "SET_STATS", payload: stats });
-      }
-    } finally {
-      if (mounted.current) {
-        dispatch({ type: "SET_STATS_LOADING", payload: false });
-      }
+      const stats = await CardService.getStats();
+      dispatch({ type: 'SET_STATS', payload: stats });
+    } catch (err) {
+      handleError(err);
     }
-  }, []);
+  }, [handleError]);
 
   // ── Fetch transactions ─────────────────────────────────────────────────────
 
-  const fetchTransactions = useCallback(
-    async (filters: TransactionFilters = {}) => {
-      dispatch({ type: "SET_TRANSACTIONS_LOADING", payload: true });
-      // Merge with any already-active filters so the call site
-      // can just pass a delta (e.g. just { card_last_four: "4532" })
-      const merged = { ...state.activeFilters, ...filters };
+  const fetchTransactions = useCallback(async () => {
+    dispatch({ type: 'SET_LOADING', payload: true });
+    try {
+      const transactions = await CardService.getTransactions();
+      dispatch({ type: 'SET_TRANSACTIONS', payload: transactions });
+    } catch (err) {
+      handleError(err);
+    }
+  }, [handleError]);
+
+  // ── Add card ───────────────────────────────────────────────────────────────
+
+  const addCard = useCallback(
+    async (card: Omit<Card, 'id'>) => {
+      dispatch({ type: 'SET_LOADING', payload: true });
       try {
-        const result = await CardService.getTransactions(merged);
-        if (mounted.current) {
-          dispatch({ type: "SET_TRANSACTIONS", payload: result });
-        }
-      } catch (err: any) {
-        if (mounted.current) {
-          dispatch({
-            type: "SET_TRANSACTIONS_ERROR",
-            payload: err?.response?.data?.detail ?? "Failed to load transactions.",
-          });
-        }
-      } finally {
-        if (mounted.current) {
-          dispatch({ type: "SET_TRANSACTIONS_LOADING", payload: false });
-        }
+        const newCard = await CardService.addCard(card);
+        dispatch({ type: 'ADD_CARD', payload: newCard });
+      } catch (err) {
+        handleError(err);
       }
     },
-    [state.activeFilters]
+    [handleError]
   );
 
-  // ── Create card ────────────────────────────────────────────────────────────
+  // ── Delete card ────────────────────────────────────────────────────────────
 
-  const createCard = useCallback(async (payload: CreateCardPayload): Promise<Card> => {
-    const card = await CardService.createCard(payload);
-    dispatch({ type: "ADD_CARD", payload: card });
-    // Refresh stats since a new card changes limits
-    fetchStats();
-    return card;
-  }, [fetchStats]);
-
-  // ── Update card ────────────────────────────────────────────────────────────
-
-  const updateCard = useCallback(
-    async (id: string, payload: UpdateCardPayload): Promise<Card> => {
-      dispatch({ type: "SET_CARD_ACTION_LOADING", payload: { id, action: "updating" } });
+  const deleteCard = useCallback(
+    async (id: string) => {
+      dispatch({ type: 'SET_LOADING', payload: true });
       try {
-        const updated = await CardService.updateCard(id, payload);
-        dispatch({ type: "UPDATE_CARD", payload: updated });
-        return updated;
-      } finally {
-        dispatch({ type: "SET_CARD_ACTION_LOADING", payload: { id, action: null } });
+        await CardService.deleteCard(id);
+        dispatch({ type: 'REMOVE_CARD', payload: id });
+      } catch (err) {
+        handleError(err);
       }
     },
-    []
+    [handleError]
   );
 
-  // ── Freeze ─────────────────────────────────────────────────────────────────
+  // ── Clear error ────────────────────────────────────────────────────────────
 
-  const freezeCard = useCallback(async (id: string) => {
-    dispatch({ type: "SET_CARD_ACTION_LOADING", payload: { id, action: "freezing" } });
-    try {
-      const updated = await CardService.freezeCard(id);
-      dispatch({ type: "UPDATE_CARD", payload: updated });
-    } finally {
-      dispatch({ type: "SET_CARD_ACTION_LOADING", payload: { id, action: null } });
-    }
+  const clearError = useCallback(() => {
+    dispatch({ type: 'CLEAR_ERROR' });
   }, []);
 
-  // ── Unfreeze ───────────────────────────────────────────────────────────────
-
-  const unfreezeCard = useCallback(async (id: string) => {
-    dispatch({ type: "SET_CARD_ACTION_LOADING", payload: { id, action: "unfreezing" } });
-    try {
-      const updated = await CardService.unfreezeCard(id);
-      dispatch({ type: "UPDATE_CARD", payload: updated });
-    } finally {
-      dispatch({ type: "SET_CARD_ACTION_LOADING", payload: { id, action: null } });
-    }
-  }, []);
-
-  // ── Block ──────────────────────────────────────────────────────────────────
-
-  const blockCard = useCallback(async (id: string) => {
-    dispatch({ type: "SET_CARD_ACTION_LOADING", payload: { id, action: "blocking" } });
-    try {
-      const updated = await CardService.blockCard(id);
-      dispatch({ type: "UPDATE_CARD", payload: updated });
-    } finally {
-      dispatch({ type: "SET_CARD_ACTION_LOADING", payload: { id, action: null } });
-    }
-  }, []);
-
-  // ── Set default ────────────────────────────────────────────────────────────
-
-  const setDefaultCard = useCallback(async (id: string) => {
-    dispatch({ type: "SET_CARD_ACTION_LOADING", payload: { id, action: "setting-default" } });
-    try {
-      const updated = await CardService.setDefaultCard(id);
-      // The backend clears is_default on all other cards, so re-fetch the full list
-      await fetchCards();
-      dispatch({ type: "UPDATE_CARD", payload: updated });
-    } finally {
-      dispatch({ type: "SET_CARD_ACTION_LOADING", payload: { id, action: null } });
-    }
-  }, [fetchCards]);
-
-  // ── Filter helpers ─────────────────────────────────────────────────────────
-
-  const setFilters = useCallback((filters: TransactionFilters) => {
-    const merged = { ...state.activeFilters, ...filters };
-    dispatch({ type: "SET_ACTIVE_FILTERS", payload: merged });
-    // Immediately re-fetch with new filters applied
-    fetchTransactions(merged);
-  }, [state.activeFilters, fetchTransactions]);
-
-  const clearFilters = useCallback(() => {
-    dispatch({ type: "SET_ACTIVE_FILTERS", payload: {} });
-    fetchTransactions({});
-  }, [fetchTransactions]);
-
-  // ── Derived helpers ────────────────────────────────────────────────────────
-
-  const getCardById = useCallback(
-    (id: string) => state.cards.find((c) => c.id === id),
-    [state.cards]
-  );
-
-  const defaultCard = state.cards.find((c) => c.is_default);
-
-  // ── Initial load ───────────────────────────────────────────────────────────
+  // ── Fetch everything on mount ──────────────────────────────────────────────
 
   useEffect(() => {
     fetchCards();
     fetchStats();
     fetchTransactions();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchCards, fetchStats, fetchTransactions]);
 
-  const value: CardContextValue = {
-    ...state,
-    fetchCards,
-    fetchStats,
-    fetchTransactions,
-    createCard,
-    updateCard,
-    freezeCard,
-    unfreezeCard,
-    blockCard,
-    setDefaultCard,
-    setFilters,
-    clearFilters,
-    getCardById,
-    defaultCard,
-  };
+  // ── Context value ──────────────────────────────────────────────────────────
 
-  return <CardContext.Provider value={value}>{children}</CardContext.Provider>;
+  const contextValue = useMemo<CardContextType>(
+    () => ({
+      ...state,
+      fetchCards,
+      fetchStats,
+      fetchTransactions,
+      addCard,
+      deleteCard,
+      clearError,
+    }),
+    [state, fetchCards, fetchStats, fetchTransactions, addCard, deleteCard, clearError]
+  );
+
+  return (
+    <CardContext.Provider value={contextValue}>
+      {children}
+    </CardContext.Provider>
+  );
 }
 
-// ─── Consumer hook ─────────────────────────────────────────────────────────────
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useCards(): CardContextValue {
-  const ctx = useContext(CardContext);
-  if (!ctx) {
-    throw new Error("useCards must be used inside <CardProvider>");
+export function useCard(): CardContextType {
+  const context = useContext(CardContext);
+  if (!context) {
+    throw new Error('useCard must be used within a <CardProvider>.');
   }
-  return ctx;
+  return context;
 }
 
 export default CardContext;
