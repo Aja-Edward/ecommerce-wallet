@@ -2,7 +2,7 @@
  * Wallet Service
  * API service layer for all wallet-related operations
  */
-
+import { API_BASE_URL } from './api';
 import type {
   Wallet,
   WalletTransaction,
@@ -21,8 +21,6 @@ import type {
 import type { ApiError } from '../types/api.types';
 
 // ─── Base Configuration ────────────────────────────────────────────────────────
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api';
 const WALLET_BASE = `${API_BASE_URL}/wallet`;
 
 // ─── Token Helper ──────────────────────────────────────────────────────────────

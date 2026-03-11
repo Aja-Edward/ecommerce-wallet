@@ -2,6 +2,7 @@
 import { Suspense, lazy } from 'react'
 import { createBrowserRouter, Outlet } from 'react-router-dom';
 import { WalletProvider } from '../context/WalletContext';
+import { CardProvider } from '../context/CardContext';
 import ErrorBoundary from './../components/ErrorBoundary';
 import RouteErrorElement from '../components/RouterErrorElement';
 import { Navbar } from '../components/home/Navbar';
@@ -42,9 +43,11 @@ const MainLayout = () => (
 // Dashboard layout — WalletProvider wraps the shell + all child routes
 const DashboardLayout = () => (
   <WalletProvider>
+    <CardProvider>
     <Suspense fallback={<LoadingFallback />}>
       <Outlet />   {/* DashboardShell renders here */}
     </Suspense>
+     </CardProvider>
   </WalletProvider>
 );
 
